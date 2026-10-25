@@ -6,8 +6,11 @@ from homeassistant.helpers.entity import EntityCategory
 
 from .const import DOMAIN
 from .rointe_entity import RointeRadiatorEntity
-
-OPTIONS = {"Always on": 0, "10 seconds": 10, "30 seconds": 30}
+from .rointesdk.controls import (
+    DISPLAY_TIMEOUT_OPTIONS as OPTIONS,
+    REPORTED_DISPLAY_TIMEOUT_OPTIONS,
+    display_timeout_option,
+)
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
@@ -34,7 +37,6 @@ class RointeDisplayTimeout(RointeRadiatorEntity, SelectEntity):
     _attr_name = "Display Timeout"
     _attr_entity_category = EntityCategory.CONFIG
     _attr_icon = "mdi:monitor"
-    _attr_options = list(OPTIONS)
 
     def __init__(self, coordinator, device):
         super().__init__(coordinator, device, unique_id=f"{device.id}_display_timeout")
@@ -44,11 +46,30 @@ class RointeDisplayTimeout(RointeRadiatorEntity, SelectEntity):
         return super().available and self.device.supports_setting("backlight_time")
 
     @property
+    def extra_state_attributes(self):
+        """Expose the reported timeout to help diagnose unknown selections."""
+        value = self.device._data.get("backlight_time") if self.device else None
+        return {
+            "reported_timeout": value,
+            "reported_timeout_type": type(value).__name__,
+        }
+
+    @property
     def current_option(self):
         value = self.device._data.get("backlight_time") if self.device else None
-        return next((name for name, seconds in OPTIONS.items() if seconds == value), None)
+        return display_timeout_option(value)
+
+    @property
+    def options(self):
+        """Offer app choices plus a reported default while it is current."""
+        current = self.current_option
+        return [name for name in REPORTED_DISPLAY_TIMEOUT_OPTIONS
+                if name in OPTIONS or name == current]
 
     async def async_select_option(self, option):
+        # Selecting the already reported default needs no device write.
+        if option not in OPTIONS and option == self.current_option and option in self.options:
+            return
         if option not in OPTIONS or self.device is None:
             raise HomeAssistantError("Invalid timeout or unavailable device")
         result = await self.hass.async_add_executor_job(

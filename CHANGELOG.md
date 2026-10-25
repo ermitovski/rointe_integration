@@ -1,5 +1,22 @@
 # Changelog
 
+## v3.2.3 (2026-10-25)
+
+### Fixed
+- Recognise the 15-second display timeout reported by Nexa devices instead of showing unknown. Preserve this existing default when changing brightness or sound; new timeout commands remain limited to the app's always-on, 10-second and 30-second choices. Numeric text values are also recognised.
+
+### Added
+- Standalone read-only validators for display timeouts and all integration field groups, using gitignored credentials and reports with sensitive identifiers redacted.
+
+### Validation
+- 416 automated regression tests pass against Home Assistant 2026.10.4 / Python 3.14; HACS and Hassfest validation pass.
+- Live read-only checks across 8 radiators report no invalid fields. A user-driven app round trip confirmed literal device timeout values of 15, 10 and 30 while the room record remained at 15.
+- Brightness/sound command preservation is covered by mocked transport tests; physical application and Home Assistant deployment remain unverified.
+
+### Installation
+- Update through HACS and restart Home Assistant. Requires Home Assistant 2026.10.4 or newer.
+- Local credential and diagnostic report files are excluded from Git and release assets.
+
 ## v3.2.2 (2026-10-25)
 
 ### Fixed
