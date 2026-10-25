@@ -98,6 +98,17 @@ def _get_schedule_status(device: RointeDevice) -> str:
 
 
 SENSOR_DESCRIPTIONS = [
+    RointeSensorEntityDescription(
+        key="holiday_schedule", name="Holiday Schedule", icon="mdi:bag-suitcase",
+        value_fn=lambda device: "enabled" if device.installation.get("holidaysMode") else "disabled",
+        last_reset_fn=lambda device: None,
+        available_fn=lambda device: isinstance(device.installation.get("holidaysMode"), bool),
+        attributes_fn=lambda device: {
+            "periods": device.installation.get("holidays", []),
+            "time_zone": device.installation.get("timeZone"),
+            "installation_id": device.installation_id,
+        },
+    ),
     # Current room temperature sensor (probe value).
     RointeSensorEntityDescription(
         key="current_temperature",

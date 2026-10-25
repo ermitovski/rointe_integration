@@ -53,7 +53,8 @@ SERVICE_SET_SCHEDULE_SCHEMA = vol.Schema(
 async def async_setup_services(hass: HomeAssistant) -> None:
     """Register advanced controls and surface rejected device commands."""
 
-    async def apply(call: ServiceCall, action) -> None:
+    async def apply(call: ServiceCall, action, installation_scope=False) -> None:
+        seen_installations = set()
         registry = er.async_get(hass)
         for entity_id in call.data[ATTR_ENTITY_ID]:
             entity = registry.async_get(entity_id)
@@ -75,6 +76,13 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             )
             if device is None:
                 raise HomeAssistantError(f"Rointe device is unavailable: {entity_id}")
+            if installation_scope:
+                installation_id = getattr(device, "installation_id", None)
+                if not installation_id:
+                    raise HomeAssistantError("This entity has no Nexa installation")
+                if installation_id in seen_installations:
+                    continue
+                seen_installations.add(installation_id)
             result = await hass.async_add_executor_job(
                 action, coordinator.rointe_api, device
             )
@@ -104,7 +112,19 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             lambda api, device: _set_schedule(api, device, call.data[ATTR_SCHEDULE]),
         )
 
+    async def set_holiday_schedule(call: ServiceCall) -> None:
+        await apply(call, lambda api, device: api.set_holiday_schedule(
+            device.installation_id, call.data["periods"]), installation_scope=True)
+
+    async def clear_holiday_schedule(call: ServiceCall) -> None:
+        await apply(call, lambda api, device: api.set_holiday_schedule(
+            device.installation_id, []), installation_scope=True)
+
     for service, handler, schema in (
+        ("set_holiday_schedule", set_holiday_schedule, vol.Schema({
+            vol.Required(ATTR_ENTITY_ID): cv.entity_ids, vol.Required("periods"): [dict],
+        })),
+        ("clear_holiday_schedule", clear_holiday_schedule, SERVICE_DEACTIVATE_BOOST_SCHEMA),
         (SERVICE_ACTIVATE_BOOST, activate_boost, SERVICE_ACTIVATE_BOOST_SCHEMA),
         (SERVICE_DEACTIVATE_BOOST, deactivate_boost, SERVICE_DEACTIVATE_BOOST_SCHEMA),
         (SERVICE_SET_SCHEDULE, set_schedule, SERVICE_SET_SCHEDULE_SCHEMA),
