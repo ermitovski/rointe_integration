@@ -241,7 +241,7 @@ SENSOR_DESCRIPTIONS = [
         icon="mdi:timer",
         native_unit_of_measurement=UnitOfTime.SECONDS,
         state_class=SensorStateClass.MEASUREMENT,
-        value_fn=lambda radiator: radiator.timer_time if radiator.timer_mode else 0,
+        value_fn=lambda radiator: radiator.boost_countdown if radiator.timer_mode else 0,
         last_reset_fn=lambda radiator: None,
         available_fn=lambda radiator: radiator.timer_mode,
     ),

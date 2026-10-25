@@ -63,8 +63,8 @@ def mock_socket(monkeypatch, status="ok"):
 @pytest.mark.parametrize(
     "body",
     [
-        {"boost_active": True, "boost_countdown": 3600},
-        {"boost_active": False, "boost_countdown": 0},
+        {"timer_mode": True, "timer_time": 1800000000},
+        {"timer_mode": False, "timer_time": 0},
         {"block_local": 1, "block_remote": 0},
         {"windows_open_mode": 1, "silence_mode": 0, "pir_mode": 1},
         {"dont_disturb_mode": 1, "ice_mode": False, "user_mode": True},
@@ -142,7 +142,7 @@ def test_legacy_settings_use_rest_and_preserve_schedule_days(api):
     body = api._send_patch_request.call_args.args[2]
     assert body["schedule"] == ["C" * 24] + ["E" * 24] * 6
     assert body["block_local"] is True
-    assert not api.set_device_settings(device, {"boost_active": True}).success
+    assert not api.set_device_boost(device, 3600).success
 
 
 @pytest.mark.asyncio
@@ -153,7 +153,7 @@ async def test_services_resolve_climate_id_and_propagate_rejection(monkeypatch):
     )
     monkeypatch.setattr(services.er, "async_get", lambda _: registry)
     api = SimpleNamespace(
-        set_device_settings=MagicMock(return_value=ApiResponse(False, None, "Denied"))
+        set_device_boost=MagicMock(return_value=ApiResponse(False, None, "Denied"))
     )
     device = SimpleNamespace(id="device")
     coordinator = SimpleNamespace(
@@ -177,7 +177,5 @@ async def test_services_resolve_climate_id_and_propagate_rejection(monkeypatch):
         await handlers["activate_boost"](
             SimpleNamespace(data={"entity_id": ["climate.test"], "duration": 60})
         )
-    api.set_device_settings.assert_called_once_with(
-        device, {"boost_active": True, "boost_countdown": 3600}
-    )
+    api.set_device_boost.assert_called_once_with(device, 3600, None)
     coordinator.async_request_refresh.assert_not_awaited()

@@ -1361,6 +1361,37 @@ class RointeAPI:
             self._nexa_energy_cache[device_id] = result
             return ApiResponse(True, result, None)
 
+    def set_device_boost(self, device, duration_seconds, temperature=None) -> ApiResponse:
+        """Use the Nexa app's timer protocol, with one atomic acknowledged write."""
+        if not self.use_nexa_ws:
+            return ApiResponse(False, None, "Boost is only supported for Nexa devices.")
+        required = ("timer_mode", "timer_time", "timer_temp")
+        if not all(device.supports_setting(key) for key in required):
+            return ApiResponse(False, None, "This device does not support timer Boost.")
+        try:
+            duration = float(duration_seconds)
+            if not math.isfinite(duration) or not duration.is_integer():
+                raise ValueError("Boost duration must be a whole number of seconds.")
+            if duration != 0 and not 300 <= duration <= 14400:
+                raise ValueError("Boost duration must be between 5 and 240 minutes.")
+            if duration == 0:
+                return self.set_device_settings(device, {"timer_mode": False, "timer_time": 0})
+            if device.user_mode or device.pilot_mode:
+                raise ValueError("Disable limited mode and pilot mode before starting Boost.")
+            temp = float(temperature if temperature is not None else device.timer_config_temp)
+            if not math.isfinite(temp) or not 7 <= temp <= 30 or temp * 2 != round(temp * 2):
+                raise ValueError("Boost temperature must be 7–30 °C in half-degree steps.")
+            payload = {"timer_mode": True, "timer_temp": temp,
+                       "timer_time": int(utils.now().timestamp()) + int(duration),
+                       "mode": 0, "power": 2}
+            if device.supports_setting("timer_config_time"):
+                payload["timer_config_time"] = int(duration)
+            if device.supports_setting("timer_config_temp"):
+                payload["timer_config_temp"] = temp
+            return self.set_device_settings(device, payload)
+        except (TypeError, ValueError, OverflowError) as err:
+            return ApiResponse(False, None, str(err))
+
     def set_device_settings(
         self, device: RointeDevice, data: Dict[str, Any]
     ) -> ApiResponse:
@@ -1422,8 +1453,11 @@ class RointeAPI:
             "mode",
             "power",
             "schedule",
-            "boost_active",
-            "boost_countdown",
+            "timer_mode",
+            "timer_time",
+            "timer_temp",
+            "timer_config_time",
+            "timer_config_temp",
             "windows_open_mode",
             "silence_mode",
             "block_local",
@@ -1445,13 +1479,13 @@ class RointeAPI:
                     payload.pop("schedule")
                 ).items():
                     payload[f"schedule/{day}"] = hours
-            for key in ("temp", "comfort", "eco", "ice", "um_min_temp", "um_max_temp"):
+            for key in ("temp", "comfort", "eco", "ice", "um_min_temp", "um_max_temp", "timer_temp", "timer_config_temp"):
                 if key in payload:
                     value = float(payload[key])
                     if not math.isfinite(value):
                         raise ValueError("Temperature must be finite.")
                     payload[key] = value
-            for key in ("mode", "power", "boost_countdown"):
+            for key in ("mode", "power", "timer_time", "timer_config_time"):
                 if key in payload:
                     payload[key] = int(payload[key])
         except (TypeError, ValueError, OverflowError) as err:
