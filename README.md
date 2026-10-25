@@ -341,3 +341,14 @@ Protocol reference: the public [Rointe Nexa web app](https://rointenexa.com/),
 inspected 2026-10-25 (build `8b8da08c-7177-4d97-884d-4a80b88951d4`). Its
 `DeviceConfig` selects settings using the three numeric product codes. There
 is no assumed mapping from these codes to every retail model.
+
+### Nexa Boost timer
+
+`rointe.activate_boost` and `rointe.deactivate_boost` use the current Nexa timer
+protocol. Duration is 5–240 minutes; temperature is optional and otherwise uses
+the device's saved Boost temperature. The end time is an absolute UTC timestamp,
+so the remaining-time sensors no longer expose an epoch as a duration. Boost
+sets manual mode, matching the Nexa app; ending Boost does not automatically
+restore a previous weekly programme. Select Auto afterwards when required.
+Only devices reporting supported timer fields offer this operation. Protocol
+writes are covered by mocked tests and still need live hardware validation.

@@ -114,17 +114,12 @@ async def async_setup_services(hass: HomeAssistant) -> None:
 
 def _activate_boost(api, device, duration_seconds: int, temperature: float | None):
     """Activate boost through the configured backend."""
-    body: dict[str, Any] = {"boost_active": True, "boost_countdown": duration_seconds}
-    if temperature is not None:
-        body["temp"] = temperature
-    return api.set_device_settings(device, body)
+    return api.set_device_boost(device, duration_seconds, temperature)
 
 
 def _deactivate_boost(api, device):
     """Deactivate boost through the configured backend."""
-    return api.set_device_settings(
-        device, {"boost_active": False, "boost_countdown": 0}
-    )
+    return api.set_device_boost(device, 0, None)
 
 
 def _set_schedule(api, device, schedule: dict):

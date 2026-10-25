@@ -92,12 +92,12 @@ def api(sockets):
 
 def test_reads_and_atomic_writes_share_one_authentication(api, sockets):
     assert api._read_via_websocket("/one") == "/one"
-    assert api._write_via_websocket("serial", {"boost_active": True}).success
+    assert api._write_via_websocket("serial", {"timer_mode": True}).success
     assert api._read_via_websocket("/two") == "/two"
     assert len(sockets.instances) == 1
     messages = sockets.instances[0].messages
     assert [message["a"] for message in messages] == ["auth", "g", "m", "g"]
-    assert messages[2]["b"]["d"]["boost_active"] is True
+    assert messages[2]["b"]["d"]["timer_mode"] is True
 
 
 def test_connection_requires_verified_certificate_and_hostname(transport, sockets):

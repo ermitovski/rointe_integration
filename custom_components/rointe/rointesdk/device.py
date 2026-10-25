@@ -217,14 +217,13 @@ class RointeDevice:
         self.wifi_signal = int(data.get("wifisignal", 0))
         self.wifi_ssid = str(data.get("wifissid", ""))
 
-        # Boost mode
-        self.boost_active = bool(data.get("boost_active", False))
-        self.boost_countdown = int(data.get("boost_countdown", 0))
-
         # Timer mode
         self.timer_mode = bool(data.get("timer_mode", False))
         self.timer_time = int(data.get("timer_time", 0))
         self.timer_temp = float(data.get("timer_temp", self.temp))
+        self.timer_config_temp = float(data.get("timer_config_temp", self.timer_temp))
+        self.timer_config_time = int(data.get("timer_config_time", 0))
+        self._timer_protocol = "timer_mode" in data and "timer_time" in data
 
         # Window detection
         self.windows_open_mode = bool(data.get("windows_open_mode", False))
@@ -338,6 +337,8 @@ class RointeDevice:
         """Return the active setpoint, or None when no heating is requested."""
         if not self.power:
             return None
+        if self.boost_active and self._timer_protocol:
+            return self.timer_temp
         if self.mode == "manual":
             return self.temp
         schedule_mode = self.get_current_schedule_mode()
@@ -357,6 +358,20 @@ class RointeDevice:
     def target_temperature(self) -> float | None:
         """Return the active target temperature."""
         return self.get_effective_target_temperature()
+
+    @property
+    def boost_active(self) -> bool:
+        """The Nexa app treats the timer as active only before its end time."""
+        if self._timer_protocol:
+            return self.timer_mode and self.boost_countdown > 0
+        return bool(self._data.get("boost_active", False))
+
+    @property
+    def boost_countdown(self) -> int:
+        """Seconds remaining, derived from Nexa's absolute UTC end timestamp."""
+        if self._timer_protocol:
+            return max(0, self.timer_time - int(utils.now().timestamp())) if self.timer_mode else 0
+        return max(0, int(self._data.get("boost_countdown", 0)))
 
     @staticmethod
     def device_type(data: dict) -> str:
@@ -390,6 +405,8 @@ class RointeDevice:
             return True  # Connect/older Nexa: preserve field-based controls.
         if kind not in {1, 2, 3, 4, 5}:
             return field in {"comfort", "eco", "ice", "ice_mode"}
+        if field.startswith("timer_"):
+            return kind in {1, 2, 4, 5}
         if field == "block_local":
             return False  # Not an editable control in the current Nexa app.
         if field == "pir_mode":
