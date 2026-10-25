@@ -155,6 +155,22 @@ SENSOR_DESCRIPTIONS = [
         else None,
         last_reset_fn=lambda radiator: None,  # HA handles resets for total_increasing
     ),
+    RointeSensorEntityDescription(
+        key="energy_cost", name="Energy Cost", icon="mdi:currency-eur",
+        device_class=SensorDeviceClass.MONETARY, native_unit_of_measurement="EUR",
+        state_class=SensorStateClass.TOTAL,
+        value_fn=lambda device: device.energy_data.cost if device.energy_data else None,
+        last_reset_fn=lambda device: device.energy_data.start if device.energy_data else None,
+        available_fn=lambda device: device.energy_data is not None and device.energy_data.cost is not None,
+    ),
+    RointeSensorEntityDescription(
+        key="energy_saving", name="Energy Saving", icon="mdi:leaf",
+        device_class=SensorDeviceClass.MONETARY, native_unit_of_measurement="EUR",
+        state_class=SensorStateClass.TOTAL,
+        value_fn=lambda device: device.energy_data.saving if device.energy_data else None,
+        last_reset_fn=lambda device: device.energy_data.start if device.energy_data else None,
+        available_fn=lambda device: device.energy_data is not None and device.energy_data.saving is not None,
+    ),
     # Effective power usage in W
     RointeSensorEntityDescription(
         key="power",

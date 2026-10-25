@@ -22,6 +22,11 @@ class EnergyConsumptionData:
         kwh: float,
         effective_power: float,
         created: datetime,
+        cost: float | None = None,
+        saving: float | None = None,
+        temperature: float | None = None,
+        temperature_probe: float | None = None,
+        daily: bool = False,
     ):
         """Initialize the value."""
         self.start = start
@@ -29,3 +34,8 @@ class EnergyConsumptionData:
         self.kwh = kwh
         self.effective_power = effective_power
         self.created = created
+        self.cost = cost
+        self.saving = saving
+        self.temperature = temperature
+        self.temperature_probe = temperature_probe
+        self.daily = daily
