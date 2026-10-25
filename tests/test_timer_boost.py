@@ -71,3 +71,10 @@ def test_active_expired_and_cancelled_timer_drive_target_and_remaining(setup):
     device.timer_time = now + 90
     device.timer_mode = False
     assert not device.boost_active
+
+
+def test_boost_cannot_override_physical_off(setup):
+    api, device, _ = setup
+    device._data["power"] = 0
+    assert not api.set_device_boost(device, 3600, 22).success
+    api.set_device_settings.assert_not_called()

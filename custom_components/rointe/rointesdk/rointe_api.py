@@ -1480,6 +1480,8 @@ class RointeAPI:
                 raise ValueError("Boost duration must be between 5 and 240 minutes.")
             if duration == 0:
                 return self.set_device_settings(device, {"timer_mode": False, "timer_time": 0})
+            if not isinstance(device._data.get("power"), bool) and device._data.get("power") == 0:
+                raise ValueError("The device is switched off at the unit")
             if device.user_mode or device.pilot_mode:
                 raise ValueError("Disable limited mode and pilot mode before starting Boost.")
             temp = float(temperature if temperature is not None else device.timer_config_temp)

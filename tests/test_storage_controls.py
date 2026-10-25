@@ -155,3 +155,10 @@ def test_enriched_storage_data_keeps_reported_and_commanded_separate(api, storag
     result = client._enrich_nexa_device({"data": storage[0]._data}, {"zone_id": "zone"})
     assert result["data"]["charge_percentage"] == 37
     assert result["commanded"]["charge_percentage_limit"] == 90
+
+
+def test_storage_cannot_override_physical_off(api, storage):
+    client, messages = api
+    client._read_via_websocket.return_value["power"] = 0
+    assert not client.set_storage_settings(storage[0], {"charge_smart": True}).success
+    assert messages == []

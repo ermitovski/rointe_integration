@@ -18,6 +18,9 @@ STORAGE_FIELDS = frozenset(
 
 def prepare_storage_settings(device, commanded, changes):
     """Validate fresh zone state and preserve paired settings without defaults."""
+    power = commanded.get("power", device._data.get("power"))
+    if not isinstance(power, bool) and power == 0:
+        raise ValueError("The device is switched off at the unit")
     if not changes or set(changes) - STORAGE_FIELDS:
         raise ValueError("Unsupported storage setting")
     for key in changes:
