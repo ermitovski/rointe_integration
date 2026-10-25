@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from .rointesdk import utils as sdk_utils
 from .rointesdk.rointe_api import ApiResponse, RointeAPI
+from homeassistant.util import dt as dt_util
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -24,6 +26,8 @@ from .services import async_setup_services
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Rointe Heaters from a config entry."""
+
+    sdk_utils.DEFAULT_TIME_ZONE = dt_util.DEFAULT_TIME_ZONE
 
     api_type = entry.options.get(CONF_API_TYPE, entry.data.get(CONF_API_TYPE))
     if not api_type:

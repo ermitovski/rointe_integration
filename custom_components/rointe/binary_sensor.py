@@ -60,7 +60,7 @@ BINARY_SENSOR_DESCRIPTIONS: tuple[RointeBinarySensorEntityDescription, ...] = (
         key="heating",
         name="Heating",
         device_class=BinarySensorDeviceClass.HEAT,
-        value_fn=lambda device: device.status_warming == 2,
+        value_fn=lambda device: device.heating,
     ),
     RointeBinarySensorEntityDescription(
         key="connected",
