@@ -6,6 +6,8 @@
 
 Home Assistant integration for Rointe electric radiators. Control your Rointe heating devices directly from Home Assistant with full climate entity support.
 
+This project is a maintained fork of [Joshua Yewman's Rointe integration](https://github.com/JYewman/rointe_integration).
+
 ## How It Works
 
 This integration connects to Rointe's cloud infrastructure to control your radiators. It supports two different API backends depending on your device generation.
@@ -309,10 +311,14 @@ cp -r custom_components/rointe /path/to/ha/config/custom_components/
 
 ## License
 
-This project is licensed under the MIT License.
+This project is licensed under the [MIT License](LICENSE), retaining Joshua Yewman's copyright notice.
+The bundled SDK includes code from [tggm/rointe-sdk](https://github.com/tggm/rointe-sdk),
+also under the [MIT License](custom_components/rointe/rointesdk/LICENSE), copyright 2022 Tiago Matias.
+Both license notices are included in the integration folder so they accompany installations and release ZIPs.
 
 ## Acknowledgements
 
+- Joshua Yewman ([@JYewman](https://github.com/JYewman)) for the upstream integration
+- Tiago Matias ([@tggm](https://github.com/tggm)) for the [original HACS integration](https://github.com/tggm/rointe-radiators) and [Rointe SDK](https://github.com/tggm/rointe-sdk)
 - Thanks to all contributors who have helped improve this integration
 - Rointe for manufacturing quality electric radiators
-- tggm for the original HCAS integration
