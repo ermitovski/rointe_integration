@@ -1,5 +1,13 @@
 # Changelog
 
+## v3.2.1 (2026-10-25)
+
+### Fixed
+- Restore the Configured Power and Power Reduction icons by replacing invalid Material Design Icon names with supported icons.
+
+### Installation
+- Update through HACS and restart Home Assistant. Requires Home Assistant 2026.10.4 or newer.
+
 ## v3.2.0 (2026-10-25)
 
 ### Added
