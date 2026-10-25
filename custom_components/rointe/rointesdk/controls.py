@@ -7,6 +7,25 @@ import math
 DISPLAY_FIELDS = ("backlight", "backlight_on", "backlight_time", "buzzer")
 NIGHT_FIELDS = ("dont_disturb_mode", "dont_disturb_start", "dont_disturb_end", "dont_disturb_decrease")
 OPTIONAL_FIELDS = frozenset((*DISPLAY_FIELDS, *NIGHT_FIELDS, "adelanto_enable"))
+DISPLAY_TIMEOUT_OPTIONS = {"Always on": 0, "10 seconds": 10, "30 seconds": 30}
+# Nexa's app defaults to 15 even though its buttons only offer 0, 10 and 30.
+# Live devices also report 15. Recognise it without inventing a 15 -> 30 alias
+# or offering an unverified new command to change a different value to 15.
+REPORTED_DISPLAY_TIMEOUT_OPTIONS = {
+    "Always on": 0, "10 seconds": 10, "15 seconds": 15, "30 seconds": 30,
+}
+
+
+def display_timeout_option(value) -> str | None:
+    """Interpret a reported timeout without guessing missing or invalid values."""
+    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+        return None
+    try:
+        value = float(value)
+    except (ValueError, OverflowError):
+        return None
+    return next((name for name, seconds in REPORTED_DISPLAY_TIMEOUT_OPTIONS.items()
+                 if seconds == value), None)
 
 
 def prepare_optional_settings(device, changes: dict) -> dict:
@@ -41,7 +60,9 @@ def prepare_optional_settings(device, changes: dict) -> dict:
             raise ValueError(f"{key} must be a finite integer")
         number = int(number)
         if key == "backlight_time":
-            valid = number in {0, 10, 30}
+            valid = number in DISPLAY_TIMEOUT_OPTIONS.values() or (
+                key not in changes and number == 15
+            )
         elif key in {"dont_disturb_start", "dont_disturb_end"}:
             valid = 0 <= number <= 86399
         else:

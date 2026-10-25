@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- Recognise the 15-second display timeout reported by Nexa devices instead of showing unknown. Preserve this existing default when changing brightness or sound; new timeout commands remain limited to the app's always-on, 10-second and 30-second choices. Numeric text values are also recognised.
+
 ## v3.2.2 (2026-10-25)
 
 ### Fixed

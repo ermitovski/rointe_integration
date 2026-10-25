@@ -263,6 +263,92 @@ logger:
     custom_components.rointe: debug
 ```
 
+### Validate all integration fields locally
+
+The general validator reads device fields, storage-zone commands, installation
+holidays and timezone, firmware metadata, and SDK-parsed energy statistics. It
+uses the same gitignored credentials file and dependencies as the timeout helper
+below. Once those are set up, run:
+
+```sh
+.venv/bin/python scripts/validate_fields.py --timezone Europe/Madrid
+```
+
+Use Home Assistant's timezone for schedule interpretation and daily energy
+grouping. Without `--timezone`, the helper uses this computer's current local
+timezone. Add `--expected-timeout 30` to compare every device with the app's
+selected display timeout; no expected timeout is assumed by default.
+
+The gitignored `.rointe-validation.json` report includes every catalogued field's
+presence, raw type, value, expected shape/range, and parsed model value where one
+exists. It identifies missing/null fields, defaults, numeric text, invalid values,
+and family-specific controls that do not apply. Missing optional fields are normal
+and do not make the check fail. `setting_supported` describes the SDK's setting
+capability check; read-only sensor visibility can have different conditions.
+The field catalogue is checked against the model's reads, transport writes and
+number/switch descriptions by regression tests.
+
+The validator checks schedule formats, night times, boolean types, numeric ranges
+and steps, paired charge/user limits, holiday period ordering, and derived model
+state such as heating, target temperature, Boost and power reduction. It retains
+raw field diagnostics if a malformed value prevents device-model construction.
+Energy values are already parsed by the SDK; this report does not include raw
+statistics responses. Optional statistics/catalogue failures are reported as
+warnings while other device checks continue. Nexa's unavailable firmware-update
+catalogue is not queried.
+
+Credentials, tokens and unrelated response fields are omitted. Serial numbers,
+SSID names and installation/zone identifiers are redacted; device names and
+schedules are included. Only authentication and reads are performed. Exit codes
+are `0` for completed checks with no invalid values or requested mismatches,
+`1` for invalid values, mismatches or required-read/model failures, and `2` for
+local setup/file errors. Physical device behavior, Home Assistant's entity
+lifecycle and restored cumulative-energy history require separate checks.
+
+### Validate only a display timeout locally
+
+The read-only helper uses the bundled SDK without installing Home Assistant.
+From this repository, with Python 3.10 or newer:
+
+```sh
+python3 -m venv .venv
+.venv/bin/python -m pip install -r scripts/requirements.txt
+.venv/bin/python scripts/validate_display_timeout.py --init
+```
+
+Fill in `username` (your account email) and `password` in the generated
+`.rointe-credentials.json`. Keep `api_type` as `nexa` for the Nexa app; `rointe`
+and `auto` are also supported. The file is gitignored and created with permissions
+that restrict access to your user. Enter credentials as JSON strings, escaping
+any embedded double quotes or backslashes. The helper never executes file contents.
+
+With the Rointe app showing 30 seconds, run:
+
+```sh
+.venv/bin/python scripts/validate_display_timeout.py --expected 30
+```
+
+For each device, the report shows the raw `backlight_time`, its type, whether the
+integration supports the setting, and how the original and fixed parsers interpret
+it. A text value `"30"` confirms numeric-text parsing is relevant; a numeric `30`
+already worked before the fix and points to a different cause. The reported
+15-second Nexa default is recognised as `15 seconds`, not converted to 30. The
+report marks it `reported_only`, since the app's buttons do not offer 15.
+Missing, null or unrecognised values are reported without inventing a timeout.
+
+The helper only reads settings and saves a gitignored `.rointe-display-timeout.json`
+report. Reports include device names and selected timeout diagnostics, but exclude
+credentials, tokens, serial numbers and unrelated device data. To check updates,
+change the value in the Rointe app, wait around 30 seconds and rerun with the new
+`--expected` value (`0`, `10`, `15` or `30`; 15 checks the reported default).
+All discovered devices are compared against
+that value; different settings on other devices can produce expected mismatches.
+
+Exit codes: `0` means all device values match, `1` means a mismatch, unsupported
+setting or cloud-read failure, and `2` means a local setup or file error. A matching
+report validates the cloud value and shared parser; checking Home Assistant after
+installing the change is still needed to confirm the entity updates correctly.
+
 ## Migration from Previous Versions
 
 If you previously used an older version of this integration:
@@ -379,6 +465,21 @@ and an end earlier than the start represents a period crossing midnight.
 Only reported, compatible settings are created. Changes preserve the device's
 other reported night/display settings in the same command. Early start lets the
 device preheat for its own schedule; it does not create a Home Assistant timer.
+
+Nexa devices can also report a 15-second display timeout. The public Nexa web app
+defines 15 as its default while offering only 0, 10 and 30 as button choices.
+Home Assistant shows `15 seconds` when that value is reported, and keeps it intact
+when changing brightness or sound. This extra choice disappears after a device
+reports a standard app choice. Selecting the already reported `15 seconds` does
+not send a command; changing a different timeout to 15 is not offered. There is
+no verified conversion from a stored 15 to the app's 30-second button, so the
+integration reports the cloud value directly.
+
+A live app round trip confirmed that selecting 10 and then 30 updates the device
+record to literal 10 and 30, while its room record can remain at 15. The timeout
+entity therefore continues to use the individual device record. An app button's
+highlight is not sufficient evidence of the persisted device value when these
+default settings disagree.
 
 ### Nexa holiday schedules
 

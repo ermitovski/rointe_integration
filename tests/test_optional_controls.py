@@ -28,10 +28,89 @@ def test_display_change_preserves_all_companions(device):
         "backlight": 0, "backlight_on": 5, "backlight_time": 10, "buzzer": 3}
 
 
+@pytest.mark.parametrize("value,expected", [
+    (0, "Always on"), (10, "10 seconds"), (30, "30 seconds"),
+    ("0", "Always on"), ("10", "10 seconds"), ("30", "30 seconds"),
+    (10.0, "10 seconds"), ("30.0", "30 seconds"),
+    (None, None), ("", None), ("invalid", None), (False, None),
+    (True, None), ([], None), ({}, None), (15, "15 seconds"),
+    ("15", "15 seconds"), (20, None),
+    (10.5, None), (float("nan"), None), (float("inf"), None),
+])
+def test_timeout_reads_numeric_cloud_values_without_guessing(device, value, expected):
+    device._data["backlight_time"] = value
+    coordinator = SimpleNamespace(devices={device.id: device})
+    entity = RointeDisplayTimeout(coordinator, device)
+    assert entity.current_option == expected
+    assert entity.extra_state_attributes == {
+        "reported_timeout": value,
+        "reported_timeout_type": type(value).__name__,
+    }
+
+
 def test_night_change_preserves_overnight_period(device):
     assert prepare_optional_settings(device, {"dont_disturb_decrease": False}) == {
         "dont_disturb_mode": True, "dont_disturb_start": 82800,
         "dont_disturb_end": 25200, "dont_disturb_decrease": False}
+
+
+@pytest.mark.parametrize("timeout", [15, "15"])
+def test_display_change_preserves_reported_nexa_default(device, timeout):
+    device._data["backlight_time"] = timeout
+    assert prepare_optional_settings(device, {"backlight_on": 7}) == {
+        "backlight": 2, "backlight_on": 7, "backlight_time": 15, "buzzer": 3,
+    }
+    with pytest.raises(ValueError):
+        prepare_optional_settings(device, {"backlight_time": 15})
+
+
+def test_unknown_companion_timeout_is_not_silently_rewritten(device):
+    device._data["backlight_time"] = 20
+    with pytest.raises(ValueError):
+        prepare_optional_settings(device, {"backlight_on": 7})
+    assert device._data["backlight_time"] == 20
+
+
+@pytest.mark.asyncio
+async def test_reported_default_displays_truthfully_and_can_be_changed_to_app_choice(device):
+    device._data["backlight_time"] = 15
+    api = SimpleNamespace(set_optional_settings=MagicMock(return_value=ApiResponse(True, None, None)))
+    coordinator = SimpleNamespace(devices={device.id: device}, rointe_api=api,
+                                  async_request_refresh=AsyncMock())
+    async def executor(fn, *args):
+        return fn(*args)
+    entity = RointeDisplayTimeout(coordinator, device)
+    entity.hass = SimpleNamespace(async_add_executor_job=executor)
+    assert entity.current_option == "15 seconds"
+    assert entity.options == ["Always on", "10 seconds", "15 seconds", "30 seconds"]
+    await entity.async_select_option("15 seconds")
+    api.set_optional_settings.assert_not_called()
+    await entity.async_select_option("30 seconds")
+    api.set_optional_settings.assert_called_once_with(device, {"backlight_time": 30})
+    coordinator.async_request_refresh.assert_awaited_once()
+    # The next snapshot removes the reported-only choice once it is not current.
+    device._data["backlight_time"] = 30
+    assert entity.current_option == "30 seconds"
+    assert entity.options == ["Always on", "10 seconds", "30 seconds"]
+    with pytest.raises(HomeAssistantError):
+        await entity.async_select_option("15 seconds")
+    assert api.set_optional_settings.call_count == 1
+
+
+def test_transport_preserves_reported_default_in_brightness_command(device, monkeypatch):
+    device._data["backlight_time"] = 15
+    api = RointeAPI("user", "password", api_type="nexa")
+    api.use_nexa_ws = True
+    api.firebase_ws_url = "wss://offline.invalid"
+    api.auth_token = "offline-token"
+    api._ensure_valid_auth = MagicMock(return_value=True)
+    messages = mock_socket(monkeypatch)
+    try:
+        assert api.set_optional_settings(device, {"backlight_on": 7}).success
+        assert messages[1]["b"]["d"]["backlight_time"] == 15
+        assert messages[1]["b"]["d"]["backlight_on"] == 7
+    finally:
+        api.close()
 
 
 @pytest.mark.parametrize("field,value", [("backlight", -1), ("backlight_on", 0),
