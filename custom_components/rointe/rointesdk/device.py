@@ -286,13 +286,13 @@ class RointeDevice:
         self.latest_firmware_version = latest_fw
         self.hass_available = True
 
-    def get_current_schedule_mode(self) -> ScheduleMode:
+    def get_current_schedule_mode(self, when: datetime | None = None) -> ScheduleMode:
         """Return the current schedule mode for the device.
 
         Returns C for Comfort, E for Eco, O for no-schedule.
         Handles both list format (legacy) and dict format (Nexa API).
         """
-        day_time = utils.now()
+        day_time = when if when is not None else utils.now()
         day_of_week = day_time.weekday()  # 0 is Monday
         hour_index = day_time.hour
 
@@ -329,41 +329,28 @@ class RointeDevice:
         else:
             return ScheduleMode.NONE
 
-    def get_effective_target_temperature(self) -> float:
-        """Return the effective target temperature based on current mode and schedule.
-
-        In AUTO mode, returns the temperature based on the current schedule slot.
-        In MANUAL mode, returns the current temp setpoint.
-        """
-        # If in manual mode, just return the current temp setpoint
+    def get_effective_target_temperature(self) -> float | None:
+        """Return the active setpoint, or None when no heating is requested."""
+        if not self.power:
+            return None
         if self.mode == "manual":
             return self.temp
-
-        # In auto mode, determine target from schedule
         schedule_mode = self.get_current_schedule_mode()
-
         if schedule_mode == ScheduleMode.COMFORT:
             return self.comfort_temp
-        elif schedule_mode == ScheduleMode.ECO:
+        if schedule_mode == ScheduleMode.ECO:
             return self.eco_temp
-        elif schedule_mode == ScheduleMode.NONE:
-            # "O" in schedule means off/frost protection
-            return self.ice_temp
-
-        # Fallback to current temp setpoint
-        return self.temp
+        return self.ice_temp if self.ice_mode else None
 
     @property
     def heating(self) -> bool:
-        """Return True if the device is actively heating.
-
-        Based on status_warming: 0=off, 1=maintaining, 2=active heating.
-        """
-        return self.status_warming == 2
+        """Derive heating consistently from power, schedule and temperature."""
+        target = self.get_effective_target_temperature()
+        return target is not None and self.temp_probe < target
 
     @property
-    def target_temperature(self) -> float:
-        """Return the current target temperature (alias for get_effective_target_temperature)."""
+    def target_temperature(self) -> float | None:
+        """Return the active target temperature."""
         return self.get_effective_target_temperature()
 
     def user_mode_supported(self) -> bool:

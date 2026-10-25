@@ -46,16 +46,11 @@ class RointeSensorEntityDescription(
 
 def _get_heating_status(device: RointeDevice) -> str:
     """Get human-readable heating status."""
-    # Cross-check with temperature to avoid stale status_warming
-    target = device.get_effective_target_temperature()
-    if device.temp_probe >= target:
+    if not device.power:
+        return "off"
+    if not device.heating:
         return "idle"
-    if device.status_warming == 2:
-        return "heating"
-    elif device.status_warming == 1:
-        return "maintaining"
-    else:
-        return "idle"
+    return "maintaining" if device.status_warming == 1 else "heating"
 
 
 def _get_effective_power(device: RointeDevice) -> float:
@@ -74,7 +69,7 @@ def _get_effective_power(device: RointeDevice) -> float:
 
     target = device.get_effective_target_temperature()
     # If current temp >= target, not heating (regardless of stale status_warming)
-    if device.temp_probe >= target:
+    if target is None or device.temp_probe >= target:
         return 0
 
     # Check energy_data first
@@ -145,7 +140,7 @@ SENSOR_DESCRIPTIONS = [
         device_class=SensorDeviceClass.TEMPERATURE,
         native_unit_of_measurement=UnitOfTemperature.CELSIUS,
         state_class=SensorStateClass.MEASUREMENT,
-        value_fn=lambda radiator: radiator.temp,
+        value_fn=lambda radiator: radiator.get_effective_target_temperature(),
         last_reset_fn=lambda radiator: None,
     ),
     # Energy usage in kWh (for Energy Dashboard)

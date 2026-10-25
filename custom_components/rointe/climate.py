@@ -133,21 +133,9 @@ class RointeHaClimate(RointeRadiatorEntity, ClimateEntity):
         from the temperature differential rather than trusting the device state.
         """
 
-        # Forced to off, either on Manual or Auto mode.
         if not self._radiator.power:
             return HVACAction.OFF
-
-        # Get the effective target temperature (schedule-aware in AUTO mode)
-        target = self._radiator.get_effective_target_temperature()
-        current = self._radiator.temp_probe
-
-        # If current temp is at or above target, we're idle
-        if current >= target:
-            return HVACAction.IDLE
-
-        # Target is above current temp - the radiator should be heating
-        # Don't trust stale status_warming from Firebase; derive from temps
-        return HVACAction.HEATING
+        return HVACAction.HEATING if self._radiator.heating else HVACAction.IDLE
 
     @property
     def preset_mode(self) -> str | None:
@@ -167,7 +155,7 @@ class RointeHaClimate(RointeRadiatorEntity, ClimateEntity):
                 return PRESET_ECO
             elif schedule_mode == ScheduleMode.NONE:
                 # "O" in schedule means frost/ice protection
-                return RointePreset.ICE
+                return RointePreset.ICE if self._radiator.ice_mode else None
             return None
 
         # In MANUAL mode, use the device's stored preset
