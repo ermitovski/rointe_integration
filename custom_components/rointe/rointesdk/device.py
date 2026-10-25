@@ -28,7 +28,7 @@ class RointeDevice:
     hardware_version: Optional[str]
 
     nominal_power: int
-    nominal_effective_power: int
+    nominal_effective_power: float
     power: bool
 
     # Describes the preset: ICE, ECO, Comfort, None
@@ -158,7 +158,7 @@ class RointeDevice:
 
         self.name = data.get("name", "")
         self.nominal_power = int(data.get("nominal_power", 0))
-        self.nominal_effective_power = int(
+        self.nominal_effective_power = float(
             data.get("nominal_effective_power", self.nominal_power)
         )
         power_val = data.get("power", False)
@@ -407,6 +407,10 @@ class RointeDevice:
         """
         if field not in self._data or self._data[field] is None:
             return False
+        if field == "nominal_effective_power":
+            from .power import supports_power_reduction
+
+            return supports_power_reduction(self._data)
         kind = self.product_type
         if kind is None:
             return True  # Connect/older Nexa: preserve field-based controls.

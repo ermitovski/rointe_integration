@@ -106,3 +106,26 @@ set_charging_schedule:
       example: '{"0": "111111100000000000000000"}'
       selector:
         object:
+
+set_installation_power_reduction:
+  name: Set Installation Power Reduction
+  description: >
+    Apply the same installed-power reduction to every supported radiator discovered
+    in the selected heater's Nexa installation, including unselected radiators.
+    Unsupported models are skipped. Zero restores original power ratings.
+  target:
+    entity:
+      integration: rointe
+      domain: climate
+  fields:
+    reduction:
+      name: Reduction
+      description: Percentage reduction from each radiator's original nominal wattage.
+      required: true
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 30
+          step: 5
+          unit_of_measurement: "%"

@@ -71,6 +71,7 @@ class RointeAPI:
         self._nexa_installation_cache = {}
         self._nexa_holiday_lock = threading.Lock()
         self._nexa_storage_lock = threading.Lock()
+        self._nexa_power_lock = threading.Lock()
         # (token_name, header_name) combo that last worked against the Nexa
         # installations endpoints; see _nexa_authenticated_get.
         self._nexa_auth_combo: Optional[tuple[str, str]] = None
@@ -1371,6 +1372,69 @@ class RointeAPI:
             self._nexa_energy_cache[device_id] = result
             return ApiResponse(True, result, None)
 
+    def set_device_power_reduction(self, device, reduction) -> ApiResponse:
+        """Adjust one supported Nexa radiator from its latest nominal rating."""
+        from .power import validate_reduction
+
+        if not self.use_nexa_ws:
+            return ApiResponse(False, None, "Power adjustment requires Nexa")
+        try:
+            reduction = validate_reduction(reduction)
+        except (TypeError, ValueError, OverflowError) as err:
+            return ApiResponse(False, None, str(err))
+        with self._nexa_power_lock:
+            prepared = self._prepare_power_reduction(device, reduction)
+            if not prepared.success:
+                return prepared
+            return self._write_via_websocket(self._get_nexa_device_key(device), prepared.data)
+
+    def _prepare_power_reduction(self, device, reduction) -> ApiResponse:
+        """Validate the live model and watts before any adjustment write."""
+        from .power import power_reduction_payload
+
+        if not device.supports_setting("nominal_effective_power"):
+            return ApiResponse(False, None, "This device does not support power adjustment")
+        current = self.get_device(device.id)
+        if not current.success:
+            return current
+        try:
+            payload = power_reduction_payload(current.data["data"], reduction)
+        except (KeyError, TypeError, ValueError, OverflowError) as err:
+            return ApiResponse(False, None, f"Unable to prepare power adjustment: {err}")
+        return ApiResponse(True, payload, None)
+
+    def set_installation_power_reduction(self, installation_id, devices, reduction) -> ApiResponse:
+        """Preflight all eligible discovered radiators, then report partial failures."""
+        from .power import validate_reduction
+
+        if not self.use_nexa_ws or not installation_id:
+            return ApiResponse(False, None, "Power adjustment requires a Nexa installation")
+        try:
+            reduction = validate_reduction(reduction)
+        except (TypeError, ValueError, OverflowError) as err:
+            return ApiResponse(False, None, str(err))
+        eligible = {device.id: device for device in devices
+                    if device.installation_id == installation_id
+                    and device.supports_setting("nominal_effective_power")}
+        if not eligible:
+            return ApiResponse(False, None, "No supported radiators were found in this installation")
+        with self._nexa_power_lock:
+            prepared = []
+            for device in eligible.values():
+                result = self._prepare_power_reduction(device, reduction)
+                if not result.success:
+                    return ApiResponse(False, None, f"No power adjustments sent: {device.id}: {result.error_message}")
+                prepared.append((device, result.data))
+            updated = []
+            for device, payload in prepared:
+                result = self._write_via_websocket(self._get_nexa_device_key(device), payload)
+                if not result.success:
+                    return ApiResponse(False, {"updated_device_ids": updated},
+                        f"Power adjustment failed for {device.id}: {result.error_message}. "
+                        f"{len(updated)} earlier device writes were acknowledged; refresh before retrying.")
+                updated.append(device.id)
+            return ApiResponse(True, {"updated_device_ids": updated}, None)
+
     def set_storage_settings(self, device, changes) -> ApiResponse:
         """Apply storage controls to the owning zone; never redirect other families."""
         from .storage import prepare_storage_settings
@@ -1565,6 +1629,7 @@ class RointeAPI:
             "additional_charge",
             "schedule_charging",
             "schedule_charge_type",
+            "nominal_effective_power",
             "res_auto_config",
             "res_man_config",
             "res_boost_config",
@@ -1612,6 +1677,10 @@ class RointeAPI:
                     if not math.isfinite(value):
                         raise ValueError("Temperature must be finite.")
                     payload[key] = value
+            if "nominal_effective_power" in payload:
+                from .power import positive_watts
+
+                payload["nominal_effective_power"] = positive_watts(payload["nominal_effective_power"])
             for key in ("mode", "power", "timer_time", "timer_config_time"):
                 if key in payload:
                     payload[key] = int(payload[key])

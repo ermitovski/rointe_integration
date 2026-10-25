@@ -12,6 +12,7 @@ from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers import config_validation as cv, entity_registry as er
 
 from .const import DOMAIN
+from .rointesdk.power import validate_reduction
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -52,29 +53,33 @@ SERVICE_SET_SCHEDULE_SCHEMA = vol.Schema(
 async def async_setup_services(hass: HomeAssistant) -> None:
     """Register advanced controls and surface rejected device commands."""
 
+    def resolve_device(entity_id):
+        registry = er.async_get(hass)
+        entity = registry.async_get(entity_id)
+        if entity is None:
+            raise HomeAssistantError(f"Unknown entity: {entity_id}")
+        coordinator = hass.data.get(DOMAIN, {}).get(entity.config_entry_id)
+        if coordinator is None:
+            raise HomeAssistantError(
+                f"Rointe integration is unavailable: {entity_id}"
+            )
+        device = next(
+            (
+                device
+                for did, device in coordinator.devices.items()
+                if entity.unique_id
+                in {did, f"rointe-{did}", f"rointe-{did}-climate"}
+            ),
+            None,
+        )
+        if device is None:
+            raise HomeAssistantError(f"Rointe device is unavailable: {entity_id}")
+        return coordinator, device
+
     async def apply(call: ServiceCall, action, installation_scope=False) -> None:
         seen_installations = set()
-        registry = er.async_get(hass)
         for entity_id in call.data[ATTR_ENTITY_ID]:
-            entity = registry.async_get(entity_id)
-            if entity is None:
-                raise HomeAssistantError(f"Unknown entity: {entity_id}")
-            coordinator = hass.data.get(DOMAIN, {}).get(entity.config_entry_id)
-            if coordinator is None:
-                raise HomeAssistantError(
-                    f"Rointe integration is unavailable: {entity_id}"
-                )
-            device = next(
-                (
-                    device
-                    for did, device in coordinator.devices.items()
-                    if entity.unique_id
-                    in {did, f"rointe-{did}", f"rointe-{did}-climate"}
-                ),
-                None,
-            )
-            if device is None:
-                raise HomeAssistantError(f"Rointe device is unavailable: {entity_id}")
+            coordinator, device = resolve_device(entity_id)
             if installation_scope:
                 installation_id = getattr(device, "installation_id", None)
                 if not installation_id:
@@ -123,7 +128,33 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         await apply(call, lambda api, device: api.set_storage_settings(
             device, {"schedule_charging": call.data[ATTR_SCHEDULE]}))
 
+    async def set_installation_power_reduction(call: ServiceCall) -> None:
+        plans = {}
+        for entity_id in call.data[ATTR_ENTITY_ID]:
+            coordinator, selected = resolve_device(entity_id)
+            installation_id = getattr(selected, "installation_id", None)
+            if not installation_id or not coordinator.rointe_api.use_nexa_ws:
+                raise HomeAssistantError("Power adjustment requires a Nexa installation")
+            devices = tuple(coordinator.devices.values())
+            if not any(device.installation_id == installation_id and
+                       device.supports_setting("nominal_effective_power") for device in devices):
+                raise HomeAssistantError("No supported radiators were found in this installation")
+            plans.setdefault(installation_id, (coordinator, devices))
+        for installation_id, (coordinator, devices) in plans.items():
+            result = await hass.async_add_executor_job(
+                coordinator.rointe_api.set_installation_power_reduction,
+                installation_id, devices, call.data["reduction"],
+            )
+            # A failed multi-device action can still have acknowledged earlier writes.
+            await coordinator.async_request_refresh()
+            if not result.success:
+                raise HomeAssistantError(result.error_message or "Unable to adjust installation power")
+
     for service, handler, schema in (
+        ("set_installation_power_reduction", set_installation_power_reduction, vol.Schema({
+            vol.Required(ATTR_ENTITY_ID): cv.entity_ids,
+            vol.Required("reduction"): validate_reduction,
+        })),
         ("set_charging_schedule", set_charging_schedule, SERVICE_SET_SCHEDULE_SCHEMA),
         ("set_holiday_schedule", set_holiday_schedule, vol.Schema({
             vol.Required(ATTR_ENTITY_ID): cv.entity_ids, vol.Required("periods"): [dict],
