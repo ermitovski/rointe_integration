@@ -154,7 +154,9 @@ class NexaWebSocket:
         )
         self._ws = ws
         self._ws_thread = threading.Thread(
-            target=lambda: ws.run_forever(sslopt={"cert_reqs": ssl.CERT_NONE}),
+            target=lambda: ws.run_forever(
+                sslopt={"cert_reqs": ssl.CERT_REQUIRED, "check_hostname": True}
+            ),
             daemon=True,
             name="rointe-nexa-ws",
         )
