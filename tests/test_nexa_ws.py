@@ -1,6 +1,7 @@
 """Persistent Nexa transport regressions; all sockets and tokens stay offline."""
 
 import json
+import ssl
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -35,6 +36,7 @@ def sockets(monkeypatch):
             instances.append(self)
 
         def run_forever(self, **kwargs):
+            self.run_options = kwargs
             self.started.set()
             if self.open_immediately:
                 self.callbacks["on_open"](self)
@@ -96,6 +98,28 @@ def test_reads_and_atomic_writes_share_one_authentication(api, sockets):
     messages = sockets.instances[0].messages
     assert [message["a"] for message in messages] == ["auth", "g", "m", "g"]
     assert messages[2]["b"]["d"]["boost_active"] is True
+
+
+def test_connection_requires_verified_certificate_and_hostname(transport, sockets):
+    assert transport.request("g", {"p": "/device"}) is not None
+    options = sockets.instances[0].run_options["sslopt"]
+    assert options["cert_reqs"] == ssl.CERT_REQUIRED
+    assert options["check_hostname"] is True
+
+
+def test_certificate_failure_never_sends_authentication(
+    transport, sockets, monkeypatch
+):
+    def reject_certificate(socket, **kwargs):
+        socket.callbacks["on_error"](
+            socket, ssl.SSLCertVerificationError("certificate verify failed")
+        )
+
+    monkeypatch.setattr(sockets.Socket, "run_forever", reject_certificate)
+    assert transport.request("g", {"p": "/device"}) is None
+    assert len(sockets.instances) == 1
+    assert sockets.instances[0].messages == []
+    assert sockets.instances[0].done.is_set()
 
 
 def test_concurrent_device_polls_share_transport_and_match_responses(api, sockets):
