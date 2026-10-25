@@ -39,8 +39,8 @@ class RointeNumberEntityDescription(
     """Describes a Rointe number entity."""
 
     available_fn: Callable[[RointeDevice], bool] = lambda _: True
-    min_value_fn: Callable[[RointeDevice], float] = lambda _: 7
-    max_value_fn: Callable[[RointeDevice], float] = lambda _: 30
+    min_value_fn: Callable[[RointeDevice], float] | None = None
+    max_value_fn: Callable[[RointeDevice], float] | None = None
 
 
 NUMBER_DESCRIPTIONS: tuple[RointeNumberEntityDescription, ...] = (
@@ -157,16 +157,24 @@ class RointeNumber(RointeRadiatorEntity, NumberEntity):
     @property
     def native_min_value(self) -> float:
         """Return the minimum value."""
-        if self._radiator is None:
-            return self.entity_description.native_min_value or 7
-        return self.entity_description.min_value_fn(self._radiator)
+        if (
+            self._radiator is not None
+            and self.entity_description.min_value_fn is not None
+        ):
+            return self.entity_description.min_value_fn(self._radiator)
+        minimum = self.entity_description.native_min_value
+        return minimum if minimum is not None else 7
 
     @property
     def native_max_value(self) -> float:
         """Return the maximum value."""
-        if self._radiator is None:
-            return self.entity_description.native_max_value or 30
-        return self.entity_description.max_value_fn(self._radiator)
+        if (
+            self._radiator is not None
+            and self.entity_description.max_value_fn is not None
+        ):
+            return self.entity_description.max_value_fn(self._radiator)
+        maximum = self.entity_description.native_max_value
+        return maximum if maximum is not None else 30
 
     @property
     def available(self) -> bool:
