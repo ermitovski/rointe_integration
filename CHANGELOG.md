@@ -1,5 +1,31 @@
 # Changelog
 
+## v3.2.0 (2026-10-25)
+
+### Added
+- Identify Nexa devices using product type, brand and model codes, and expose optional controls only when the device reports compatible capabilities (#14).
+- Early Start, night start/end times and temperature reduction, display brightness/timeout and sound-volume controls (#16).
+- Installation-wide Nexa holiday scheduling and status, with timezone-aware periods and verified master-flag toggles (#17).
+- Storage-heater charge limits, Smart Charging, additional charging hours, direct-element permissions and partial charging schedules (#18).
+- Per-radiator installed-power reduction from 0–30% in 5% steps, configured-wattage reporting, and an action to apply the same percentage across a Nexa installation (#19).
+
+### Fixed
+- Use Nexa's timer protocol for Boost commands, target temperatures and remaining-time sensors. Boost enters manual mode, matching the Nexa app; ending Boost does not automatically restore Auto (#15).
+- Verify Nexa WebSocket certificates and hostnames, renew expired discovery credentials, and bound legacy HTTP waits (#9–11).
+- Handle missing firmware metadata and respect each temperature control's declared or active user limits (#12–13).
+- Preserve fractional configured wattages and leave storage-heater instantaneous power unknown when no measured value is available.
+
+### Scope and compatibility
+- Requires Home Assistant 2026.10.4 or newer. Update through HACS and restart Home Assistant.
+- Holiday actions affect the entire Rointe installation. Storage configuration controls affect the owning Rointe zone.
+- Installed-power reduction is available for the Nexa app's compatible radiator models. Installation-wide adjustments overwrite individual reductions on eligible discovered radiators; unsupported models are skipped. Set 0% to restore original ratings.
+- Existing entity IDs are retained. Optional controls without a reported compatible capability may become unavailable.
+
+### Validation
+- 285 automated regression tests pass against Home Assistant 2026.10.4 / Python 3.14; HACS and Hassfest validation pass.
+- Cloud responses are mocked. Live heater behavior, holiday transitions, storage charging and electrical power reduction have not yet been independently verified on hardware.
+- A cloud write acknowledgement confirms receipt, not physical application. Multi-radiator power adjustments are not atomic and report partial failures.
+
 ## v3.1.1 (2026-10-25)
 
 ### Improved
