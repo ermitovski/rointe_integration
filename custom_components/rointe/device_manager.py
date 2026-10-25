@@ -27,7 +27,7 @@ from .const import (
 
 
 def determine_latest_firmware(
-    device_data: dict[str, Any], fw_map: dict[RointeProduct, dict[str, str]]
+    device_data: dict[str, Any], fw_map: dict[RointeProduct, dict[str, str] | None]
 ) -> str | None:
     """Determine the latest FW available for a device."""
 
@@ -36,9 +36,12 @@ def determine_latest_firmware(
 
     product_type = device_data["data"].get("type", None)
     version = device_data["data"].get("product_version", None)
-    current_firmware = device_data["firmware"].get("firmware_version_device", None)
+    firmware = device_data.get("firmware") or {}
+    current_firmware = firmware.get("firmware_version_device") or firmware.get(
+        "firmware_version"
+    )
 
-    if not any((product_type, version, current_firmware)):
+    if not all((product_type, version, current_firmware)):
         LOGGER.warning(
             "Unable to determine latest FW for [%s][%s] at v[%s]",
             product_type,
@@ -56,11 +59,10 @@ def determine_latest_firmware(
         )
         return None
 
-    if product in fw_map and current_firmware in fw_map[product]:
-        return fw_map[product][current_firmware]
-
-    # If no update path available return the current firmware string.
-    return current_firmware
+    # A product omitted from the catalogue has a None mapping.
+    upgrade_map = fw_map.get(product) or {}
+    current_firmware = str(current_firmware)
+    return upgrade_map.get(current_firmware, current_firmware)
 
 
 class RointeDeviceManager:
@@ -152,7 +154,7 @@ class RointeDeviceManager:
 
         if firmware_map_response.success:
             # May be empty for Nexa users (no firmware endpoint)
-            firmware_map: dict[RointeProduct, dict[str, str]] | None = (
+            firmware_map: dict[RointeProduct, dict[str, str] | None] | None = (
                 firmware_map_response.data or None
             )
         else:
@@ -191,7 +193,7 @@ class RointeDeviceManager:
         base_data_response: ApiResponse,
         device_id: str,
         energy_data_response: ApiResponse,
-        firmware_map: dict[RointeProduct, dict[str, str]] | None,
+        firmware_map: dict[RointeProduct, dict[str, str] | None] | None,
     ) -> RointeDevice | None:
         """Process the data related to a single device."""
 
