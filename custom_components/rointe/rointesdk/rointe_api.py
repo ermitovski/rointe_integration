@@ -21,6 +21,7 @@ from .settings import (
     AUTH_HOST,
     AUTH_REFRESH_ENDPOINT,
     AUTH_TIMEOUT_SECONDS,
+    HTTP_TIMEOUT_SECONDS,
     AUTH_VERIFY_URL,
     ENERGY_STATS_MAX_TRIES,
     FIREBASE_APP_KEY,
@@ -399,6 +400,7 @@ class RointeAPI:
             response = requests.post(
                 f"{AUTH_HOST}{AUTH_ACCT_INFO_URL}?key={self.firebase_app_key}",
                 data=payload,
+                timeout=HTTP_TIMEOUT_SECONDS,
             )
         except RequestException as e:
             return ApiResponse(False, None, f"Network error {e}")
@@ -544,7 +546,7 @@ class RointeAPI:
         url = f"{self.firebase_base_url}{FIREBASE_INSTALLATIONS_PATH}"
 
         try:
-            response = requests.get(url, params=args)
+            response = requests.get(url, params=args, timeout=HTTP_TIMEOUT_SECONDS)
         except RequestException as e:
             return ApiResponse(False, None, f"Network error {e}")
 
@@ -586,6 +588,7 @@ class RointeAPI:
             response = requests.get(
                 url,
                 params=args,
+                timeout=HTTP_TIMEOUT_SECONDS,
             )
         except RequestException as e:
             return ApiResponse(False, None, f"Network error {e}")
@@ -625,7 +628,7 @@ class RointeAPI:
         url = f"{self.firebase_base_url}{FIREBASE_INSTALLATIONS_PATH}"
 
         try:
-            response = requests.get(url, params=args)
+            response = requests.get(url, params=args, timeout=HTTP_TIMEOUT_SECONDS)
         except RequestException as e:
             return ApiResponse(False, None, f"Network error {e}")
 
@@ -711,6 +714,7 @@ class RointeAPI:
                     FIREBASE_DEVICES_PATH_BY_ID.format(device_id),
                 ),
                 params=args,
+                timeout=HTTP_TIMEOUT_SECONDS,
             )
         except RequestException as e:
             return ApiResponse(False, None, f"Network error {e}")
@@ -779,7 +783,7 @@ class RointeAPI:
         )
 
         try:
-            response = requests.get(url, params=args)
+            response = requests.get(url, params=args, timeout=HTTP_TIMEOUT_SECONDS)
         except RequestException as e:
             return ApiResponse(False, None, f"Network error {e}")
 
@@ -1003,6 +1007,7 @@ class RointeAPI:
                 url,
                 params=params,
                 json=body,
+                timeout=HTTP_TIMEOUT_SECONDS,
             )
         except RequestException as e:
             return ApiResponse(False, None, f"Communications error {e}")
