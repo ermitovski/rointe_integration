@@ -16,7 +16,7 @@ This integration connects to Rointe's cloud infrastructure to control your radia
 Home Assistant  ←→  Rointe Integration  ←→  Rointe Cloud  ←→  Your Radiators
                          │
                          ├── Nexa API (WebSocket)
-                         │   └── Real-time state updates via Firebase
+                         │   └── Polling over a shared Firebase connection
                          │
                          └── Legacy API (REST)
                              └── Polling-based updates
@@ -27,8 +27,8 @@ Home Assistant  ←→  Rointe Integration  ←→  Rointe Cloud  ←→  Your R
 The Nexa platform uses Firebase Realtime Database for device state synchronisation:
 
 1. **Authentication** - The integration authenticates with Rointe's servers using your account credentials
-2. **WebSocket Connection** - Establishes a persistent WebSocket connection to Firebase for real-time updates
-3. **State Synchronisation** - Device states (temperature, power, schedules) are synced automatically when they change
+2. **WebSocket Connection** - Reuses one authenticated Firebase connection for device reads and commands, with keep-alives and reconnection after a dropped or stale connection
+3. **State Synchronisation** - Device states (temperature, power, schedules) are polled every 15 seconds over that connection
 4. **Command Dispatch** - When you adjust settings in Home Assistant, commands are sent to Firebase which pushes them to your devices
 
 **Schedule-Aware Temperature Display**: In AUTO mode, the integration reads the device's schedule to determine the current target temperature (Comfort/Eco/Off) based on the time of day, rather than relying on potentially stale cached values.
@@ -45,7 +45,7 @@ The Legacy platform uses traditional REST API polling:
 
 | Direction | Nexa | Legacy |
 |-----------|------|--------|
-| State updates | Real-time (WebSocket) | Polling (30-60s) |
+| State updates | Polling (15s, shared WebSocket) | Polling (15s) |
 | Commands | Instant | Instant |
 | Schedule data | Synced from device | Synced from device |
 
@@ -116,7 +116,7 @@ Version 3.1.0 requires Home Assistant 2026.10.4 or newer.
 
 | API Type | Description |
 |----------|-------------|
-| **Nexa** | For newer Rointe devices using the Nexa platform. Uses WebSocket for real-time updates. |
+| **Nexa** | For newer Rointe devices using the Nexa platform. Polls over a shared WebSocket connection. |
 | **Legacy** | For older Rointe devices using the original REST API. |
 
 If you're unsure which to use, try Nexa first. If your devices don't appear, reconfigure with Legacy.

@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Reuse one authenticated Nexa WebSocket for polling and atomic commands, with keep-alives and bounded reconnection. Adapted from alex1075's proposal in JYewman/rointe_integration#9.
+- Close the connection permanently on unload, failed setup, and Home Assistant shutdown; unfinished requests cannot reopen it.
+- Preserve schedule, boost, lock, temperature-limit validation and explicit write acknowledgements. State updates still poll every 15 seconds.
+
 ## v3.1.0 (2026-10-25)
 
 ### Added
