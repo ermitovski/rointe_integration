@@ -140,6 +140,7 @@ SENSOR_DESCRIPTIONS = [
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda radiator: radiator.temp_surface if radiator.temp_surface > 0 else None,
         last_reset_fn=lambda radiator: None,
+        available_fn=lambda radiator: radiator._data.get("temp_surface") is not None,
     ),
     # Floor temperature (if floor probe available)
     RointeSensorEntityDescription(
@@ -251,6 +252,7 @@ SENSOR_DESCRIPTIONS = [
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda radiator: radiator.wifi_signal if radiator.wifi_signal != 0 else None,
         last_reset_fn=lambda radiator: None,
+        available_fn=lambda radiator: radiator._data.get("wifisignal") is not None,
         attributes_fn=lambda radiator: {"ssid": radiator.wifi_ssid} if radiator.wifi_ssid else None,
     ),
     # Boost countdown
@@ -262,7 +264,8 @@ SENSOR_DESCRIPTIONS = [
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda radiator: radiator.boost_countdown if radiator.boost_active else 0,
         last_reset_fn=lambda radiator: None,
-        available_fn=lambda radiator: radiator.boost_active,
+        available_fn=lambda radiator: radiator.boost_active
+        and (not radiator._timer_protocol or radiator.supports_setting("timer_mode")),
     ),
     # Timer countdown
     RointeSensorEntityDescription(
@@ -273,7 +276,8 @@ SENSOR_DESCRIPTIONS = [
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda radiator: radiator.boost_countdown if radiator.timer_mode else 0,
         last_reset_fn=lambda radiator: None,
-        available_fn=lambda radiator: radiator.timer_mode,
+        available_fn=lambda radiator: radiator.timer_mode
+        and radiator.supports_setting("timer_mode"),
     ),
     # Charge percentage (storage heaters)
     RointeSensorEntityDescription(

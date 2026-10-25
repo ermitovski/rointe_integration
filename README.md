@@ -168,6 +168,10 @@ After setup, the following entities are created for each radiator:
 |--------|-------------|
 | `update.{device_name}_firmware` | Firmware update availability |
 
+Firmware update entities are available only with the legacy API. Nexa does not
+provide a firmware update catalogue through the integration; existing Nexa
+firmware update entities are removed when the integration loads.
+
 ## Services
 
 The integration provides custom services for advanced control:
@@ -336,6 +340,16 @@ Optional controls require a non-null field in the device response. For Nexa's
 known numeric families, the integration also checks the restrictions used by
 the web app, so unused fields in shared firmware do not automatically enable
 controls. Unknown numeric families expose only basic preset settings.
+
+Optional status sensors also require their reported fields. Missing timer,
+presence, pilot-wire, lock and connectivity fields no longer create default
+off/unlocked/connected statuses. Presence and timer sensors follow the same
+model restrictions as their controls. A reported local-lock status remains
+readable even on models where changing that lock is unsupported. Surface
+temperature and Wi-Fi signal sensors are discovered when their readings are
+reported, and Legionella Protection Running recognizes the `acs` water-heater
+family. Supported sensors can be discovered on later refreshes; previously saved
+optional sensors become unavailable while their required fields are absent.
 
 Protocol reference: the public [Rointe Nexa web app](https://rointenexa.com/),
 inspected 2026-10-25 (build `8b8da08c-7177-4d97-884d-4a80b88951d4`). Its

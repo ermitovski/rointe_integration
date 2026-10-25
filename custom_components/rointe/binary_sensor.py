@@ -43,19 +43,27 @@ BINARY_SENSOR_DESCRIPTIONS: tuple[RointeBinarySensorEntityDescription, ...] = (
         name="Window Open",
         device_class=BinarySensorDeviceClass.WINDOW,
         value_fn=lambda device: device.windows_open_status,
-        available_fn=lambda device: device.windows_open_mode,
+        available_fn=lambda device: device.windows_open_mode
+        and device.supports_setting("windows_open_mode")
+        and device._data.get("windows_open_status") is not None,
     ),
     RointeBinarySensorEntityDescription(
         key="boost_active",
         name="Boost Active",
         device_class=BinarySensorDeviceClass.RUNNING,
         value_fn=lambda device: device.boost_active,
+        available_fn=lambda device: (
+            device.supports_setting("timer_mode")
+            if device._timer_protocol
+            else device._data.get("boost_active") is not None
+        ),
     ),
     RointeBinarySensorEntityDescription(
         key="timer_active",
         name="Timer Active",
         device_class=BinarySensorDeviceClass.RUNNING,
         value_fn=lambda device: device.timer_mode,
+        available_fn=lambda device: device.supports_setting("timer_mode"),
     ),
     RointeBinarySensorEntityDescription(
         key="heating",
@@ -68,30 +76,35 @@ BINARY_SENSOR_DESCRIPTIONS: tuple[RointeBinarySensorEntityDescription, ...] = (
         name="Connected",
         device_class=BinarySensorDeviceClass.CONNECTIVITY,
         value_fn=lambda device: device.is_alive,
+        available_fn=lambda device: device._data.get("is_alive") is not None,
     ),
     RointeBinarySensorEntityDescription(
         key="local_lock",
         name="Local Controls Locked",
         device_class=BinarySensorDeviceClass.LOCK,
         value_fn=lambda device: device.block_local,
+        available_fn=lambda device: device._data.get("block_local") is not None,
     ),
     RointeBinarySensorEntityDescription(
         key="remote_lock",
         name="Remote Controls Locked",
         device_class=BinarySensorDeviceClass.LOCK,
         value_fn=lambda device: device.block_remote,
+        available_fn=lambda device: device._data.get("block_remote") is not None,
     ),
     RointeBinarySensorEntityDescription(
         key="presence_mode",
         name="Presence Detection",
         device_class=BinarySensorDeviceClass.MOTION,
         value_fn=lambda device: device.pir_mode,
+        available_fn=lambda device: device.supports_setting("pir_mode"),
     ),
     RointeBinarySensorEntityDescription(
         key="pilot_wire",
         name="Pilot Wire Mode",
         device_class=BinarySensorDeviceClass.PLUG,
         value_fn=lambda device: device.pilot_mode,
+        available_fn=lambda device: device._data.get("pilot_mode") is not None,
     ),
     RointeBinarySensorEntityDescription(
         key="charging",
@@ -105,7 +118,8 @@ BINARY_SENSOR_DESCRIPTIONS: tuple[RointeBinarySensorEntityDescription, ...] = (
         name="Legionella Protection Running",
         device_class=BinarySensorDeviceClass.RUNNING,
         value_fn=lambda device: device.legionella_status,
-        available_fn=lambda device: device.type == "water_heater",
+        available_fn=lambda device: device.type in {"acs", "water_heater"}
+        and device._data.get("legionella_status") is not None,
     ),
 )
 
