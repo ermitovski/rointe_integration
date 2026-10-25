@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Optional
 import requests
 from requests.exceptions import RequestException
 
+from . import utils
 from .device import RointeDevice, ScheduleMode
 from .dto import EnergyConsumptionData
 from .settings import (
@@ -36,7 +37,7 @@ from .settings import (
     NEXA_FIREBASE_WS_URL,
     NEXA_INSTALLATIONS_URL,
     NEXA_LOGIN_URL,
-    NEXA_STATISTICS_URL,
+    NEXA_API_V4_STATISTICS_URL,
 )
 from .utils import build_update_map
 
@@ -67,12 +68,11 @@ class RointeAPI:
         self.firebase_app_key = FIREBASE_APP_KEY
         self.use_nexa_ws = False
         self._nexa_device_cache: Dict[str, Dict[str, Any]] = {}
-        self._nexa_zone_device_map: Dict[str, List[str]] = {}  # zone_id -> [device_serials]
         # (token_name, header_name) combo that last worked against the Nexa
         # installations endpoints; see _nexa_authenticated_get.
         self._nexa_auth_combo: Optional[tuple[str, str]] = None
-        self._nexa_device_zone_map: Dict[str, str] = {}  # device_serial -> zone_id
-        self._nexa_installation_energy: Optional[Dict[str, Any]] = None  # cached stats
+        self._nexa_energy_cache: Dict[str, EnergyConsumptionData] = {}
+        self._nexa_energy_cache_ttl = 300
         self._nexa_energy_lock = threading.Lock()
 
     def initialize_authentication(self) -> ApiResponse:
@@ -732,18 +732,8 @@ class RointeAPI:
     ) -> ApiResponse:
         """Retrieve the latest energy consumption values."""
 
-        # For Nexa devices, use the REST API statistics endpoint
         if self.use_nexa_ws:
-            if not installation_id:
-                return ApiResponse(
-                    False, None, "Installation ID required for Nexa energy stats"
-                )
-            # Map device_id to serial number if needed
-            device_serial = device_id
-            cached = self._nexa_device_cache.get(device_id, {})
-            if cached.get("serialNumber"):
-                device_serial = cached["serialNumber"]
-            return self.get_device_energy_from_nexa_stats(device_serial, installation_id)
+            return self._get_nexa_energy_stats(device_id)
 
         result: ApiResponse
         now = datetime.now()
@@ -1244,198 +1234,114 @@ class RointeAPI:
                 f"Nexa installation {installation_id} not found in installations list",
             )
 
-        # Cache zone-device mappings for energy attribution
-        self._build_zone_device_map(installation)
-
         return ApiResponse(True, installation, None)
 
-    def _build_zone_device_map(self, installation_data: Dict[str, Any]) -> None:
-        """Build zone-to-device mappings from installation data."""
-
-        zones = installation_data.get("zones", [])
-        if not isinstance(zones, list):
-            return
-
-        for zone in zones:
-            if not isinstance(zone, dict):
-                continue
-            zone_id = zone.get("id")
-            if not zone_id:
-                continue
-
-            device_serials: List[str] = []
-            devices = zone.get("devices", [])
-            if isinstance(devices, list):
-                for dev in devices:
-                    if isinstance(dev, dict):
-                        serial = dev.get("serialNumber") or dev.get("mac")
-                        if serial:
-                            device_serials.append(serial)
-                            self._nexa_device_zone_map[serial] = zone_id
-
-            self._nexa_zone_device_map[zone_id] = device_serials
-            LOGGER.debug(
-                "Zone %s (%s) has devices: %s",
-                zone.get("name"),
-                zone_id[:8],
-                device_serials,
-            )
-
-    def get_nexa_energy_stats(self, installation_id: str) -> ApiResponse:
-        """Retrieve energy statistics from Nexa API."""
-
-        if not self.nexa_token:
-            return ApiResponse(False, None, "Nexa token not available")
-
-        headers = {"token": self.nexa_token, "Accept": "application/json"}
-        params = {"installation": installation_id}
-
-        try:
-            response = requests.get(
-                NEXA_STATISTICS_URL,
-                headers=headers,
-                params=params,
-                timeout=AUTH_TIMEOUT_SECONDS,
-            )
-        except RequestException as e:
-            return ApiResponse(False, None, f"Network error {e}")
-
-        if response.status_code != 200:
-            LOGGER.error(
-                "Nexa statistics failed: status=%s", response.status_code
-            )
-            return ApiResponse(
-                False,
-                None,
-                f"Nexa statistics returned {response.status_code}",
-            )
-
-        try:
-            response_json = response.json()
-        except ValueError:
-            return ApiResponse(False, None, "Nexa statistics invalid JSON")
-
-        data = response_json.get("data", response_json)
-        if not isinstance(data, dict):
-            return ApiResponse(False, None, "Nexa statistics invalid format")
-
-        # Cache for later use
-        self._nexa_installation_energy = data
-        LOGGER.debug(
-            "Nexa statistics: energy=%.3f kWh, cost=%.2f, zones=%d",
-            data.get("energy", 0),
-            data.get("cost", 0),
-            len(data.get("zones", [])),
-        )
-
-        return ApiResponse(True, data, None)
-
-    def invalidate_nexa_energy_cache(self) -> None:
-        """Drop the cached Nexa installation energy snapshot.
-
-        The device manager calls this at the start of each refresh cycle so
-        the next per-device fetch repopulates the cache from the API instead
-        of returning a stale snapshot from the previous cycle.
-        """
+    def _get_nexa_energy_stats(self, device_id: str) -> ApiResponse:
+        """Read daily device totals from the v4 API, independently of state polls."""
+        # Cache per device and local date. A previous day's sample must never
+        # survive midnight, even when it was fetched only seconds ago.
         with self._nexa_energy_lock:
-            self._nexa_installation_energy = None
-
-    def get_device_energy_from_nexa_stats(
-        self, device_serial: str, installation_id: str
-    ) -> ApiResponse:
-        """Estimate device energy from Nexa installation statistics.
-
-        Uses zone cost proportions to estimate per-device energy.
-        """
-
-        # The device manager invalidates this cache at the start of each
-        # cycle, so an empty cache means we are the first device this cycle.
-        # Hold the lock while fetching so the other devices in the same
-        # cycle wait and read the populated cache instead of each firing
-        # their own HTTP request.
-        if not self._nexa_installation_energy:
-            with self._nexa_energy_lock:
-                if not self._nexa_installation_energy:
-                    stats_response = self.get_nexa_energy_stats(installation_id)
-                    if not stats_response.success:
-                        return stats_response
-
-        stats = self._nexa_installation_energy
-        if not stats:
-            return ApiResponse(False, None, "No statistics available")
-
-        total_energy = stats.get("energy", 0)
-        total_cost = stats.get("cost", 0)
-        zones = stats.get("zones", [])
-
-        if total_cost <= 0 or not zones:
-            return ApiResponse(False, None, "No cost data to estimate energy")
-
-        # Find which zone this device belongs to
-        zone_id = self._nexa_device_zone_map.get(device_serial)
-        if not zone_id:
-            LOGGER.warning(
-                "Device %s not found in zone map, returning total energy",
-                device_serial[:8],
-            )
-            # Fall back to total energy divided by device count
-            total_devices = sum(
-                len(devs) for devs in self._nexa_zone_device_map.values()
-            )
-            if total_devices > 0:
-                estimated_energy = total_energy / total_devices
-            else:
-                estimated_energy = total_energy
-            return ApiResponse(
-                True,
-                EnergyConsumptionData(
-                    created=datetime.now(),
-                    start=datetime.now() - timedelta(hours=24),
-                    end=datetime.now(),
-                    kwh=estimated_energy,
-                    effective_power=0,
-                ),
-                None,
-            )
-
-        # Find zone cost
-        zone_cost = 0
-        for zone in zones:
-            if zone.get("id") == zone_id:
-                zone_cost = zone.get("cost", 0)
+            now = utils.now()
+            cached = self._nexa_energy_cache.get(device_id)
+            if (
+                cached is not None
+                and cached.start.date() == now.date()
+                and 0
+                <= (now - cached.created).total_seconds()
+                < self._nexa_energy_cache_ttl
+            ):
+                return ApiResponse(True, cached, None)
+            serial = self._nexa_device_cache.get(device_id, {}).get("serialNumber")
+            if not serial:
+                return ApiResponse(
+                    False, None, "No device serial number for energy statistics."
+                )
+            if not self.nexa_token:
+                return ApiResponse(False, None, "No Nexa token for energy statistics.")
+            params = {
+                "groupingType": 1,
+                "groupingValue": now.strftime("%Y-%m-%d"),
+                "filterType": 3,
+                "filterValue": serial,
+            }
+            for attempt in range(2):
+                try:
+                    response = requests.get(
+                        NEXA_API_V4_STATISTICS_URL,
+                        params=params,
+                        headers={
+                            "Accept": "application/json",
+                            "token": self.nexa_token,
+                        },
+                        timeout=AUTH_TIMEOUT_SECONDS,
+                    )
+                except RequestException as err:
+                    return ApiResponse(
+                        False, None, f"Energy statistics network error: {err}"
+                    )
+                if response.status_code == 401 and attempt == 0:
+                    if self._re_authenticate():
+                        continue
                 break
+            if response.status_code != 200:
+                return ApiResponse(
+                    False, None, f"Energy statistics returned {response.status_code}"
+                )
+            try:
+                payload = response.json()
+                data = (
+                    payload.get("data", payload) if isinstance(payload, dict) else None
+                )
+                if not isinstance(data, dict):
+                    raise ValueError("Invalid statistics response")
 
-        if zone_cost <= 0:
-            return ApiResponse(False, None, "Zone has no cost data")
+                def values(field):
+                    entries = data.get(field)
+                    if entries is None:
+                        return []
+                    if not isinstance(entries, list):
+                        raise ValueError(f"Invalid {field} statistics")
+                    result = []
+                    for item in entries:
+                        if not isinstance(item, dict):
+                            raise ValueError(f"Invalid {field} entry")
+                        if item.get("value") is not None:
+                            value = float(item["value"])
+                            if not math.isfinite(value):
+                                raise ValueError(
+                                    "Statistics must contain finite numbers"
+                                )
+                            result.append((str(item.get("time", "")), value))
+                    return result
 
-        # Calculate energy proportion
-        zone_energy = (zone_cost / total_cost) * total_energy if total_cost > 0 else 0
+                consumption = values("consumption")
+                if not consumption:
+                    return ApiResponse(False, None, "No energy statistics found.")
 
-        # Divide among devices in zone
-        devices_in_zone = self._nexa_zone_device_map.get(zone_id, [device_serial])
-        device_count = len(devices_in_zone) if devices_in_zone else 1
-        device_energy = zone_energy / device_count
+                def total(field):
+                    samples = values(field)
+                    return round(sum(v for _, v in samples), 4) if samples else None
 
-        LOGGER.debug(
-            "Device %s energy estimate: %.3f kWh (zone %s: %.3f kWh, %d devices)",
-            device_serial[:8],
-            device_energy,
-            zone_id[:8],
-            zone_energy,
-            device_count,
-        )
+                def latest(field):
+                    samples = values(field)
+                    return max(samples)[1] if samples else None
 
-        return ApiResponse(
-            True,
-            EnergyConsumptionData(
-                created=datetime.now(),
-                start=datetime.now() - timedelta(hours=24),
-                end=datetime.now(),
-                kwh=device_energy,
-                effective_power=0,
-            ),
-            None,
-        )
+                result = EnergyConsumptionData(
+                    created=now,
+                    start=now.replace(hour=0, minute=0, second=0, microsecond=0),
+                    end=now,
+                    kwh=round(sum(v for _, v in consumption), 4),
+                    effective_power=0,
+                    cost=total("cost"),
+                    saving=total("saving"),
+                    temperature=latest("temperature"),
+                    temperature_probe=latest("temperatureProbe"),
+                    daily=True,
+                )
+            except (ValueError, TypeError, OverflowError) as err:
+                return ApiResponse(False, None, f"Invalid energy statistics: {err}")
+            self._nexa_energy_cache[device_id] = result
+            return ApiResponse(True, result, None)
 
     def set_device_settings(
         self, device: RointeDevice, data: Dict[str, Any]

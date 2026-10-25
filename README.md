@@ -187,6 +187,18 @@ Set the target temperature for a specific mode.
 | `temperature` | Yes | Target temperature |
 | `mode` | No | Mode to set temperature for |
 
+## Nexa energy, cost and savings
+
+Nexa statistics come from the v4 API filtered by the radiator's serial number.
+The energy sensor reports today's consumption in kWh; Energy Cost and Energy
+Saving report the API's daily euro amounts when available. Devices are not
+assigned an estimated share of installation or zone totals.
+
+Statistics are cached per radiator for five minutes, separately from the
+15-second state refresh, and refreshed at the start of a new local day. Missing
+or invalid statistics produce an unknown value instead of invented consumption.
+The v4 endpoint must be verified with your account before deployment.
+
 ## Energy Dashboard
 
 The integration provides energy sensors compatible with Home Assistant's Energy Dashboard.

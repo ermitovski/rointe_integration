@@ -21,7 +21,7 @@ ENERGY_STATS_MAX_TRIES = 5
 NEXA_API_URL = "https://rointenexa.com/api"
 NEXA_LOGIN_URL = f"{NEXA_API_URL}/user/login"
 NEXA_INSTALLATIONS_URL = f"{NEXA_API_URL}/installations"
-NEXA_STATISTICS_URL = f"{NEXA_API_URL}/statistics/consumption"
+NEXA_API_V4_STATISTICS_URL = "https://api-v4-prod.rointe.io/api/statistics"
 NEXA_FIREBASE_AUTH_URL = (
     "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword"
 )
