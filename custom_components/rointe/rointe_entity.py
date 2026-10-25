@@ -83,12 +83,7 @@ class RointeRadiatorEntity(CoordinatorEntity):
         if device is None:
             return DeviceInfo(identifiers={(DOMAIN, self._device_id)})
 
-        if device.rointe_product:
-            product_name = device.rointe_product.product_name
-        else:
-            product_name = (
-                f"{device.type.capitalize()} {device.product_version.capitalize()}"
-            )
+        product_name = device.model_name
 
         return DeviceInfo(
             identifiers={(DOMAIN, device.id)},

@@ -322,3 +322,22 @@ Both license notices are included in the integration folder so they accompany in
 - Tiago Matias ([@tggm](https://github.com/tggm)) for the [original HACS integration](https://github.com/tggm/rointe-radiators) and [Rointe SDK](https://github.com/tggm/rointe-sdk)
 - Thanks to all contributors who have helped improve this integration
 - Rointe for manufacturing quality electric radiators
+
+## Device model identification and optional controls
+
+Nexa identifies a device with `product_type`, `product_brand`, `product_model`
+and `product_version`. The type codes are 1 radiator, 2 towel rail, 3 water
+heater, 4 thermostat and 5 storage heater. Home Assistant shows the family and
+brand/model codes when available. These codes are not guaranteed retail names;
+unknown models are not labelled as Belize, Olympia or Onyx by guesswork.
+Connect retains its existing type/version names and entity IDs.
+
+Optional controls require a non-null field in the device response. For Nexa's
+known numeric families, the integration also checks the restrictions used by
+the web app, so unused fields in shared firmware do not automatically enable
+controls. Unknown numeric families expose only basic preset settings.
+
+Protocol reference: the public [Rointe Nexa web app](https://rointenexa.com/),
+inspected 2026-10-25 (build `8b8da08c-7177-4d97-884d-4a80b88951d4`). Its
+`DeviceConfig` selects settings using the three numeric product codes. There
+is no assumed mapping from these codes to every retail model.

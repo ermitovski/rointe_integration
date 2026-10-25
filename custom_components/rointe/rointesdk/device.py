@@ -131,9 +131,7 @@ class RointeDevice:
     ) -> None:
         """Initialize the device from the rointe's json blob."""
         self.id = device_id
-        self.type = device_info["data"]["type"]
-        self.product_version = str.lower(device_info["data"]["product_version"])
-        self.serialnumber = device_info["serialnumber"]
+        self.serialnumber = device_info.get("serialnumber", device_id)
         self._data = device_info.get("data", {})
         self.update_data(device_info, energy_data, latest_fw)
 
@@ -147,6 +145,13 @@ class RointeDevice:
 
         data = device_info["data"]
         self._data = data  # Keep raw data for debugging
+        self.type = self.device_type(data)
+        self.product_version = str(data.get("product_version", "")).lower()
+        self.product_type = data.get("product_type")
+        self.product_brand = data.get("product_brand")
+        self.product_model = data.get("product_model")
+        self.installation_id = device_info.get("metadata", {}).get("installation_id")
+        self.zone_id = device_info.get("metadata", {}).get("zone_id")
         firmware_data = device_info.get("firmware")
 
         self.name = data.get("name", "")
@@ -186,7 +191,7 @@ class RointeDevice:
         self.ice_temp = float(data.get("ice", self.temp))
 
         # User mode settings are only valid for V2 radiators.
-        if self.product_version == "v2":
+        if self.product_version == "v2" or self.product_type in {1, 2, 3, 4}:
             self.um_max_temp = float(data.get("um_max_temp", 0))
             self.um_min_temp = float(data.get("um_min_temp", 0))
             self.user_mode = bool(data.get("user_mode", False))
@@ -353,9 +358,55 @@ class RointeDevice:
         """Return the active target temperature."""
         return self.get_effective_target_temperature()
 
+    @staticmethod
+    def device_type(data: dict) -> str:
+        """Normalize Nexa numeric families without guessing a retail model."""
+        families = {1: "radiator", 2: "towel", 3: "acs", 4: "therm", 5: "storage_heater"}
+        raw = str(data.get("type", "")).lower()
+        return families.get(data.get("product_type"),
+                            "storage_heater" if raw == "storageheater" else raw)
+
+    @property
+    def model_name(self) -> str:
+        """Use known legacy names or an explicit Nexa family/model code."""
+        if self.product_type is not None:
+            family = self.type.replace("_", " ").title() or "Unknown device"
+            code = f" (brand {self.product_brand}, model {self.product_model})"
+            return f"Nexa {family}{code}"
+        if self.rointe_product:
+            return self.rointe_product.product_name
+        return f"{self.type.replace('_', ' ').title()} {self.product_version}".strip()
+
+    def supports_setting(self, field: str) -> bool:
+        """Require a reported field and honor the Nexa app's family restrictions.
+
+        Shared firmware reports unused fields too. Unknown families only expose
+        established basic settings; new optional controls need a known family.
+        """
+        if field not in self._data or self._data[field] is None:
+            return False
+        kind = self.product_type
+        if kind is None:
+            return True  # Connect/older Nexa: preserve field-based controls.
+        if kind not in {1, 2, 3, 4, 5}:
+            return field in {"comfort", "eco", "ice", "ice_mode"}
+        if field == "block_local":
+            return False  # Not an editable control in the current Nexa app.
+        if field == "pir_mode":
+            return kind == 1 and self.product_brand == 1 and self.product_model in range(1, 10)
+        if field in {"silence_mode", "charge_smart", "charge_percentage_min",
+                     "charge_percentage_limit", "additional_charge", "schedule_charging",
+                     "res_auto_config", "res_man_config", "res_boost_config", "res_holiday_config"}:
+            return kind == 5
+        if field in {"user_mode", "um_min_temp", "um_max_temp"}:
+            return kind in {1, 2, 3, 4}
+        if field == "windows_open_mode":
+            return kind != 3
+        return True
+
     def user_mode_supported(self) -> bool:
         """Return True if this device supports user mode."""
-        return self.product_version == "v2"
+        return self.supports_setting("user_mode")
 
     @property
     def rointe_product(self) -> RointeProduct | None:

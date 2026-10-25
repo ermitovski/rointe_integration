@@ -440,7 +440,7 @@ class RointeAPI:
                 zones = data.get("rooms")
             else:
                 zones = data
-            devices = self._extract_devices_any(zones)
+            devices = self._extract_devices_any(zones, installation_id=installation_id)
             unique_devices = list(dict.fromkeys(devices))
             LOGGER.debug(
                 "Nexa installation devices found=%s sample=%s",
@@ -472,7 +472,7 @@ class RointeAPI:
 
         return zone_devices
 
-    def _extract_devices_any(self, zone_data: Any) -> List[str]:
+    def _extract_devices_any(self, zone_data: Any, installation_id=None, zone_id=None) -> List[str]:
         """Parse devices from dict/list structures (Nexa)."""
 
         if not zone_data:
@@ -482,10 +482,16 @@ class RointeAPI:
 
         if isinstance(zone_data, list):
             for item in zone_data:
-                devices.extend(self._extract_devices_any(item))
+                devices.extend(self._extract_devices_any(item, installation_id, zone_id))
             return devices
 
         if isinstance(zone_data, dict):
+            if not any(key in zone_data for key in ("devices", "radiators", "items", "zones", "rooms", "id")):
+                for key, child_zone in zone_data.items():
+                    if isinstance(child_zone, (dict, list)):
+                        devices.extend(self._extract_devices_any(child_zone, installation_id, key))
+                return devices
+            zone_id = zone_data.get("id", zone_id)
             devices_block = (
                 zone_data.get("devices")
                 or zone_data.get("radiators")
@@ -494,7 +500,7 @@ class RointeAPI:
             if isinstance(devices_block, dict):
                 for dev_id, dev_info in devices_block.items():
                     if isinstance(dev_info, dict):
-                        self._cache_nexa_device(dev_id, dev_info)
+                        self._cache_nexa_device(dev_id, dev_info, installation_id, zone_id)
                 devices.extend(list(devices_block.keys()))
             elif isinstance(devices_block, list):
                 for dev in devices_block:
@@ -507,20 +513,26 @@ class RointeAPI:
                         or dev.get("device_id")
                     )
                     if dev_id:
-                        self._cache_nexa_device(dev_id, dev)
+                        self._cache_nexa_device(dev_id, dev, installation_id, zone_id)
                         devices.append(dev_id)
 
             sub_zones = zone_data.get("zones") or zone_data.get("rooms")
-            devices.extend(self._extract_devices_any(sub_zones))
+            if isinstance(sub_zones, dict):
+                for key, child_zone in sub_zones.items():
+                    devices.extend(self._extract_devices_any(child_zone, installation_id, key))
+            else:
+                devices.extend(self._extract_devices_any(sub_zones, installation_id, zone_id))
 
         return devices
 
-    def _cache_nexa_device(self, device_id: str, dev: Dict[str, Any]) -> None:
+    def _cache_nexa_device(self, device_id: str, dev: Dict[str, Any], installation_id=None, zone_id=None) -> None:
         """Cache Nexa device metadata for later use."""
 
-        if not device_id or device_id in self._nexa_device_cache:
+        if not device_id:
             return
-        cached = {
+        cached = {**self._nexa_device_cache.get(device_id, {}), **dev,
+            "installation_id": installation_id,
+            "zone_id": zone_id,
             "id": device_id,
             "name": dev.get("name"),
             "serialNumber": dev.get("serialNumber"),
@@ -675,7 +687,7 @@ class RointeAPI:
                     continue
                 if isinstance(ws_data, dict):
                     if "data" in ws_data:
-                        return ApiResponse(True, ws_data, None)
+                        return ApiResponse(True, self._enrich_nexa_device(ws_data, meta), None)
                     if meta:
                         LOGGER.debug(
                             "Nexa device cache hit for %s: %s",
@@ -702,7 +714,7 @@ class RointeAPI:
                                 "firmware_version"
                             ]
                         result["firmware"] = firmware_data
-                    return ApiResponse(True, result, None)
+                    return ApiResponse(True, self._enrich_nexa_device(result, meta), None)
 
             LOGGER.error("Nexa get_device websocket read failed for %s", device_id)
             return ApiResponse(False, None, "WebSocket read failed")
@@ -734,6 +746,15 @@ class RointeAPI:
             )
 
         return ApiResponse(True, response.json(), None)
+
+    @staticmethod
+    def _enrich_nexa_device(info, metadata):
+        """Retain inventory identity when absent from realtime state."""
+        info = {**info, "data": dict(info.get("data", {})), "metadata": metadata}
+        for key in ("product_type", "product_brand", "product_model", "product_version"):
+            if info["data"].get(key) is None and metadata.get(key) is not None:
+                info["data"][key] = metadata[key]
+        return info
 
     def get_latest_energy_stats(
         self, device_id: str, installation_id: Optional[str] = None

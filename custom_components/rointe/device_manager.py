@@ -262,7 +262,7 @@ class RointeDeviceManager:
             return target_device
 
         # New device.
-        device_type = device_data["data"]["type"]
+        device_type = RointeDevice.device_type(device_data["data"])
 
         if device_type not in ROINTE_SUPPORTED_DEVICES:
             LOGGER.warning("Ignoring Rointe device of type %s", device_type)
