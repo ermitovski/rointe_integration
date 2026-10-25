@@ -93,10 +93,10 @@ class RointeDeviceManager:
             for device in self.rointe_devices.values():
                 device.hass_available = False
 
-    async def update(self) -> dict[str, list[RointeDevice]]:
+    async def update(self) -> dict[str, RointeDevice]:
         """Retrieve the devices from the user's installation.
 
-        Returns a list of newly discovered devices.
+        Return a complete snapshot, preserving unavailable registered devices.
         """
 
         LOGGER.debug("Device manager updating")
@@ -113,10 +113,9 @@ class RointeDeviceManager:
                 installation_devices_response.error_message,
             )
             self._fail_all_devices()
-            return {}
+            return dict(self.rointe_devices)
 
         user_device_ids: list[str] = installation_devices_response.data
-        discovered_devices: dict[str, list[RointeDevice]] = {}
 
         # Drop the previous cycle's Nexa installation energy snapshot so the
         # first per-device energy fetch this cycle pulls fresh stats. Without
@@ -187,9 +186,11 @@ class RointeDeviceManager:
 
             if new_device:
                 self.rointe_devices[device_id] = new_device
-                discovered_devices[new_device.id] = new_device
 
-        return discovered_devices
+        for device_id, device in self.rointe_devices.items():
+            if device_id not in user_device_ids:
+                device.hass_available = False
+        return dict(self.rointe_devices)
 
     async def _process_api_data(
         self,
@@ -238,7 +239,7 @@ class RointeDeviceManager:
     ) -> RointeDevice:
         """Process a device from the API and add or update it.
 
-        Return the device if it's new or None if it's an existing one.
+        Return the current device object for both new and existing devices.
         """
 
         device_data_data = device_data.get("data", None)
@@ -262,7 +263,7 @@ class RointeDeviceManager:
                 device_data_data.get("name", "N/A"),
             )
 
-            return None
+            return target_device
 
         # New device.
         device_type = device_data["data"]["type"]

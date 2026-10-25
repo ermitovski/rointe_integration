@@ -62,6 +62,7 @@ class RointeDataUpdateCoordinator(DataUpdateCoordinator[dict[str, RointeDevice]]
         )
 
         self.unregistered_keys = {platform: {} for platform in PLATFORMS}
+        self._registered_devices = {platform: set() for platform in PLATFORMS}
 
     @property
     def devices(self) -> dict[str, RointeDevice]:
@@ -112,7 +113,7 @@ class RointeDataUpdateCoordinator(DataUpdateCoordinator[dict[str, RointeDevice]]
         new_entities: list = []
 
         for device_id, device in discovered_devices.items():
-            if device_id in self.unregistered_keys[platform]:
+            if device_id not in self._registered_devices[platform]:
                 new_entities.extend(
                     [
                         constructor(device, self)
@@ -120,7 +121,8 @@ class RointeDataUpdateCoordinator(DataUpdateCoordinator[dict[str, RointeDevice]]
                     ]
                 )
 
-                self.unregistered_keys[platform].pop(device_id)
+                self._registered_devices[platform].add(device_id)
+                self.unregistered_keys[platform].pop(device_id, None)
 
         if new_entities:
             async_add_entities(new_entities)

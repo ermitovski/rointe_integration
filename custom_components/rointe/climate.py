@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from functools import partial
+
 from typing import Any
 
 from .rointesdk.device import RointeDevice
@@ -48,10 +50,12 @@ async def async_setup_entry(
     """Set up the radiator climate entity from the config entry."""
     coordinator: RointeDataUpdateCoordinator = hass.data[DOMAIN][entry.entry_id]
 
-    # Register the Entity classes and platform on the coordinator.
-    coordinator.add_entities_for_seen_keys(
-        async_add_entities, [RointeHaClimate], "climate"
+    add_entities = partial(
+        coordinator.add_entities_for_seen_keys,
+        async_add_entities, [RointeHaClimate], "climate",
     )
+    add_entities()
+    entry.async_on_unload(coordinator.async_add_listener(add_entities))
 
 
 class RointeHaClimate(RointeRadiatorEntity, ClimateEntity):
