@@ -438,3 +438,48 @@ The zone-command approach is also described in the community's
 [Onyx field observations](https://github.com/Atmaybury-25/rointe-nexa-hacs/blob/main/docs/onyx-field-map.md).
 It is limited to these explicit storage configuration controls; individual
 radiator commands keep their existing device destination.
+
+### Nexa installed-power reduction
+
+Compatible radiators expose a **Power Reduction** number from 0–30%, in 5% steps,
+and a diagnostic **Configured Power** sensor in watts. A 20% reduction changes
+an original 1,500 W rating to 1,200 W; changing to 10% then sets 1,350 W, using
+the original rating rather than reducing the previous result again. Set 0% to
+restore the original rating. Configured Power is a setting, not a measurement
+of instantaneous consumption, and keeps fractional watts when necessary.
+
+The integration follows the current Nexa app's capability list: `product_type`
+1, `product_brand` 1, and `product_model` 20–23 or 25–32. Other models, including
+model 24 and storage heaters, do not get this control just because shared
+firmware contains the same field. Both `nominal_power` and
+`nominal_effective_power` must report finite, positive values.
+
+To apply the same reduction to every eligible radiator discovered in an
+installation, select any climate entity belonging to that installation:
+
+```yaml
+action: rointe.set_installation_power_reduction
+target:
+  entity_id: climate.living_room
+data:
+  reduction: 20
+```
+
+This action also affects eligible radiators that were not individually selected.
+Unsupported models are skipped; an installation with no eligible radiators
+returns an error. Selecting multiple heaters in one installation applies the
+operation once. New devices become eligible after normal discovery refreshes.
+
+The integration reads each eligible device's current model and nominal rating
+before any writes for that installation. A failed preflight sends no changes.
+Writes are acknowledged separately for each radiator, so an installation update
+is not atomic. A later failure reports the number of earlier acknowledged
+writes, refreshes the displayed state, and stops; it does not silently roll back
+or continue. Multiple selected installations are processed separately.
+
+Protocol reference: Nexa's public
+[installed-power adjustment code](https://rointenexa.com/_nuxt/ufbF_FP9.js) and
+[model definitions](https://rointenexa.com/_nuxt/B-QLPcdT.js), inspected
+2026-10-25. The app calculates `nominal_effective_power` from `nominal_power`
+and writes it to `/devices/{serial}/data`. These controls reproduce that cloud
+configuration; actual electrical power limiting still needs hardware validation.

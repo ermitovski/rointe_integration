@@ -16,6 +16,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import UnitOfTemperature
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity import EntityCategory
 
 from .discovery import setup_description_entities
 from .const import DOMAIN
@@ -23,6 +24,7 @@ from .coordinator import RointeDataUpdateCoordinator
 from .rointe_entity import RointeRadiatorEntity
 from .rointesdk.device import RointeDevice
 from .rointesdk.storage import STORAGE_FIELDS
+from .rointesdk.power import reduction_percentage
 
 
 @dataclass
@@ -45,6 +47,13 @@ class RointeNumberEntityDescription(
 
 
 NUMBER_DESCRIPTIONS: tuple[RointeNumberEntityDescription, ...] = (
+    RointeNumberEntityDescription(
+        key="power_reduction", name="Power Reduction", icon="mdi:flash-minus",
+        entity_category=EntityCategory.CONFIG,
+        native_unit_of_measurement="%", native_min_value=0, native_max_value=30,
+        native_step=5, mode=NumberMode.SLIDER, field_name="nominal_effective_power",
+        value_fn=lambda device: reduction_percentage(device._data),
+    ),
     RointeNumberEntityDescription(
         key="charge_percentage_min", name="Zone Minimum Charge", icon="mdi:battery-low",
         native_unit_of_measurement="%", native_min_value=0, native_max_value=30, native_step=5,
@@ -248,7 +257,10 @@ class RointeNumber(RointeRadiatorEntity, NumberEntity):
         if not device.supports_setting(field_name):
             raise HomeAssistantError("This setting is not supported by this device")
 
-        setter = api.set_storage_settings if field_name in STORAGE_FIELDS else api.set_optional_settings
-        result = setter(device, {field_name: value})
+        if field_name == "nominal_effective_power":
+            result = api.set_device_power_reduction(device, value)
+        else:
+            setter = api.set_storage_settings if field_name in STORAGE_FIELDS else api.set_optional_settings
+            result = setter(device, {field_name: value})
         if not result.success:
             raise HomeAssistantError(result.error_message or "Unable to update device")
