@@ -1015,32 +1015,37 @@ class RointeAPI:
 
         return ApiResponse(True, None, None)
 
+    def _refresh_nexa_credentials(self, rejected_token: str | None) -> bool:
+        """Serialize full login and reuse credentials another caller renewed."""
+        with self._auth_lock:
+            if self.nexa_token and self.nexa_token != rejected_token:
+                return True
+            return self._re_authenticate()
+
     def _nexa_authenticated_get(
-        self, url: str
+        self, url: str, _retry: bool = True
     ) -> tuple[Optional[requests.Response], Optional[str]]:
-        """GET a Nexa installations endpoint, negotiating the auth header format.
+        """GET installations, refreshing rejected credentials once.
 
-        The Nexa API's expected auth header format isn't documented, so the first
-        call probes token/header combinations until one returns something other
-        than 401. Re-probing all combinations on every coordinator refresh (every
-        ROINTE_API_REFRESH_INTERVAL) triggers the API's rate limiting, observed as
-        HTTP 418, so once a combination returns 200 it is cached on the instance
-        and reused directly. A fresh 401 with the cached combo forces re-probing.
+        Negotiate the header format on the first request, then reuse the known
+        working combination. A 401 with that combination renews credentials
+        instead of probing all headers again with the same expired tokens.
         """
+        with self._auth_lock:
+            tokens_by_name = {
+                name: token
+                for name, token in (
+                    ("nexa", self.nexa_token),
+                    ("nexa_refresh", self.nexa_refresh_token),
+                    ("firebase", self.auth_token),
+                )
+                if token
+            }
 
-        tokens_to_try = []
-        if self.nexa_token:
-            tokens_to_try.append(("nexa", self.nexa_token))
-        if self.nexa_refresh_token:
-            tokens_to_try.append(("nexa_refresh", self.nexa_refresh_token))
-        if self.auth_token:
-            tokens_to_try.append(("firebase", self.auth_token))
-
-        if not tokens_to_try:
+        if not tokens_by_name:
             return None, "Nexa token missing"
 
         header_templates: Dict[str, Any] = {
-            # Nexa API uses the 'token' header (not Authorization)
             "token-header": lambda t: {"token": t},
             "bearer": lambda t: {"Authorization": f"Bearer {t}"},
             "token": lambda t: {"Authorization": t},
@@ -1051,54 +1056,35 @@ class RointeAPI:
             },
             "token+x-access-token": lambda t: {"Authorization": t, "x-access-token": t},
         }
-        tokens_by_name = dict(tokens_to_try)
-
-        if self._nexa_auth_combo:
-            cached_token_name, cached_header_name = self._nexa_auth_combo
-            token_value = tokens_by_name.get(cached_token_name)
-            if token_value is not None:
-                headers = {"Accept": "application/json"}
-                headers.update(header_templates[cached_header_name](token_value))
-                try:
-                    response = requests.get(
-                        url, headers=headers, timeout=AUTH_TIMEOUT_SECONDS
-                    )
-                except RequestException as e:
-                    return None, f"Network error {e}"
-                if response.status_code != 401:
-                    return response, None
-                # Cached combo is no longer accepted - re-probe below.
-                self._nexa_auth_combo = None
+        if self._nexa_auth_combo and self._nexa_auth_combo[0] in tokens_by_name:
+            combinations = [self._nexa_auth_combo]
+        else:
+            combinations = [
+                (token_name, header_name)
+                for token_name in tokens_by_name
+                for header_name in header_templates
+            ]
 
         response = None
-        for token_name, token_value in tokens_to_try:
-            for header_name, header_builder in header_templates.items():
-                headers = {"Accept": "application/json"}
-                headers.update(header_builder(token_value))
-                try:
-                    response = requests.get(
-                        url, headers=headers, timeout=AUTH_TIMEOUT_SECONDS
-                    )
-                except RequestException as e:
-                    return None, f"Network error {e}"
-
-                if response.status_code != 401:
-                    LOGGER.debug(
-                        "Nexa auth negotiation succeeded using %s token with %s headers",
-                        token_name,
-                        header_name,
-                    )
-                    if response.status_code == 200:
-                        self._nexa_auth_combo = (token_name, header_name)
-                    return response, None
-
-                LOGGER.debug(
-                    "Nexa auth negotiation got 401 using %s token with %s headers",
-                    token_name,
-                    header_name,
+        for token_name, header_name in combinations:
+            headers = {"Accept": "application/json"}
+            headers.update(header_templates[header_name](tokens_by_name[token_name]))
+            try:
+                response = requests.get(
+                    url, headers=headers, timeout=AUTH_TIMEOUT_SECONDS
                 )
+            except RequestException as err:
+                return None, f"Network error {err}"
+            if response.status_code != 401:
+                if response.status_code == 200:
+                    self._nexa_auth_combo = (token_name, header_name)
+                return response, None
 
-        return None, "No response from Nexa API"
+        if _retry:
+            if self._refresh_nexa_credentials(tokens_by_name.get("nexa")):
+                return self._nexa_authenticated_get(url, _retry=False)
+            return None, "Nexa re-authentication failed"
+        return response, None
 
     def _get_installations_nexa(self) -> ApiResponse:
         """Retrieve installations from Nexa API."""
@@ -1269,13 +1255,15 @@ class RointeAPI:
                 "filterValue": serial,
             }
             for attempt in range(2):
+                with self._auth_lock:
+                    token = self.nexa_token
                 try:
                     response = requests.get(
                         NEXA_API_V4_STATISTICS_URL,
                         params=params,
                         headers={
                             "Accept": "application/json",
-                            "token": self.nexa_token,
+                            "token": token,
                         },
                         timeout=AUTH_TIMEOUT_SECONDS,
                     )
@@ -1284,7 +1272,7 @@ class RointeAPI:
                         False, None, f"Energy statistics network error: {err}"
                     )
                 if response.status_code == 401 and attempt == 0:
-                    if self._re_authenticate():
+                    if self._refresh_nexa_credentials(token):
                         continue
                 break
             if response.status_code != 200:
