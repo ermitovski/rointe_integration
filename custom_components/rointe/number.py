@@ -118,6 +118,14 @@ NUMBER_DESCRIPTIONS: tuple[RointeNumberEntityDescription, ...] = (
 )
 
 
+for _description in NUMBER_DESCRIPTIONS:
+    _condition = _description.available_fn
+    _field = _description.field_name
+    _description.available_fn = lambda device, field=_field, condition=_condition: (
+        device.supports_setting(field) and condition(device)
+    )
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
@@ -201,6 +209,8 @@ class RointeNumber(RointeRadiatorEntity, NumberEntity):
         """Set the value via API."""
         api = self.coordinator.rointe_api
         field_name = self.entity_description.field_name
+        if not device.supports_setting(field_name):
+            raise HomeAssistantError("This setting is not supported by this device")
 
         result = api.set_device_settings(device, {field_name: value})
         if not result.success:

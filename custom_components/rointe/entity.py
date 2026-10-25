@@ -43,12 +43,7 @@ class RointeRadiatorEntity(RointeBaseEntity):
     def device_info(self) -> DeviceInfo:
         """Return a device description for device registry."""
 
-        if self._radiator.rointe_product:
-            product_name = self._radiator.rointe_product.product_name
-        else:
-            product_name = (
-                f"{self._radiator.type.capitalize()} {self._radiator.product_version.capitalize()}",
-            )
+        product_name = self._radiator.model_name
 
         return DeviceInfo(
             identifiers={(DOMAIN, self._radiator.id)},

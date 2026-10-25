@@ -172,5 +172,5 @@ def device_update_info(
         (DOMAIN, rointe_device.id), config_entry_id
     ):
         dev_registry.async_update_device(
-            device.id, sw_version=rointe_device.firmware_version
+            device.id, sw_version=rointe_device.firmware_version, model=rointe_device.model_name
         )
