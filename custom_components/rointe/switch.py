@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any, Callable
 
 from homeassistant.components.switch import SwitchEntity, SwitchEntityDescription
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -174,13 +175,6 @@ class RointeSwitch(RointeRadiatorEntity, SwitchEntity):
         api = self.coordinator.rointe_api
         field_name = self.entity_description.field_name
 
-        # For Nexa devices, use WebSocket
-        if api.use_nexa_ws:
-            device_key = api._get_nexa_device_key(device)
-            # Convert bool to int for Nexa API
-            int_value = 1 if value else 0
-            # Some fields use bool directly
-            if field_name in ("ice_mode", "user_mode"):
-                api._write_via_websocket(device_key, {field_name: value})
-            else:
-                api._write_via_websocket(device_key, {field_name: int_value})
+        result = api.set_device_settings(device, {field_name: value})
+        if not result.success:
+            raise HomeAssistantError(result.error_message or "Unable to update device")

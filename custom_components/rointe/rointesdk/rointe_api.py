@@ -5,9 +5,9 @@ from __future__ import annotations
 from collections import namedtuple
 import json
 import logging
+import math
 import ssl
 import threading
-import time
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
@@ -1437,142 +1437,155 @@ class RointeAPI:
             None,
         )
 
+    def set_device_settings(
+        self, device: RointeDevice, data: Dict[str, Any]
+    ) -> ApiResponse:
+        """Apply settings through the device's configured API backend."""
+        if self.use_nexa_ws:
+            return self._write_via_websocket(self._get_nexa_device_key(device), data)
+        if not self._ensure_valid_auth():
+            return ApiResponse(False, None, "Invalid authentication.")
+        if any(key.startswith("boost_") for key in data):
+            return ApiResponse(False, None, "Boost is only supported for Nexa devices.")
+        body = dict(data)
+        if "schedule" in body:
+            try:
+                changes = self._validate_schedule(body["schedule"])
+            except ValueError as err:
+                return ApiResponse(False, None, str(err))
+            schedule = device.schedule
+            body["schedule"] = [
+                changes.get(
+                    str(day),
+                    schedule[day]
+                    if isinstance(schedule, list) and day < len(schedule)
+                    else schedule.get(str(day), "O" * 24)
+                    if isinstance(schedule, dict)
+                    else "O" * 24,
+                )
+                for day in range(7)
+            ]
+        url = f"{self.firebase_base_url}{FIREBASE_DEVICE_DATA_PATH_BY_ID.format(device.id)}"
+        return self._send_patch_request(url, {"auth": self.auth_token}, body)
+
+    @staticmethod
+    def _validate_schedule(schedule: Any) -> Dict[str, str]:
+        """Validate partial weekly schedules before sending them to a radiator."""
+        if not isinstance(schedule, dict) or not schedule:
+            raise ValueError("Schedule must be a non-empty dictionary.")
+        result = {}
+        for day, hours in schedule.items():
+            key = str(day)
+            if key not in {str(i) for i in range(7)}:
+                raise ValueError("Schedule days must be between 0 and 6.")
+            if not isinstance(hours, str) or len(hours) != 24:
+                raise ValueError(f"Schedule for day {day} must contain 24 hours.")
+            if any(char not in "CEO" for char in hours.upper()):
+                raise ValueError("Schedule hours must be C, E or O.")
+            result[key] = hours.upper()
+        return result
+
     def _write_via_websocket(
         self, device_id: str, data: Dict[str, Any], _retry: bool = True
     ) -> ApiResponse:
-        """Write data to Firebase via WebSocket (Nexa)."""
+        """Write an acknowledged, atomic settings update to Firebase (Nexa)."""
+        supported = {
+            "temp",
+            "comfort",
+            "eco",
+            "ice",
+            "status",
+            "mode",
+            "power",
+            "schedule",
+            "boost_active",
+            "boost_countdown",
+            "windows_open_mode",
+            "silence_mode",
+            "block_local",
+            "block_remote",
+            "pir_mode",
+            "dont_disturb_mode",
+            "ice_mode",
+            "user_mode",
+            "um_min_temp",
+            "um_max_temp",
+        }
+        if not data or set(data) - supported:
+            return ApiResponse(False, None, "Empty update or unsupported setting.")
+        payload = dict(data)
+        try:
+            if "schedule" in payload:
+                # Nested paths preserve days omitted from a partial schedule.
+                for day, hours in self._validate_schedule(
+                    payload.pop("schedule")
+                ).items():
+                    payload[f"schedule/{day}"] = hours
+            for key in ("temp", "comfort", "eco", "ice", "um_min_temp", "um_max_temp"):
+                if key in payload:
+                    value = float(payload[key])
+                    if not math.isfinite(value):
+                        raise ValueError("Temperature must be finite.")
+                    payload[key] = value
+            for key in ("mode", "power", "boost_countdown"):
+                if key in payload:
+                    payload[key] = int(payload[key])
+        except (TypeError, ValueError, OverflowError) as err:
+            return ApiResponse(False, None, f"Invalid setting: {err}")
 
         if not self._ensure_valid_auth():
             return ApiResponse(False, None, "Invalid authentication.")
-
         if not self.firebase_ws_url:
             return ApiResponse(False, None, "No WebSocket URL configured.")
-
         try:
-            import websocket  # type: ignore
+            import websocket
         except ImportError:
             return ApiResponse(
                 False, None, "websocket-client is required for Nexa devices."
             )
 
-        fields_to_write: List[tuple[str, Any]] = []
-
-        for key in ("temp", "comfort", "eco", "ice"):
-            if key in data:
-                fields_to_write.append((key, float(data[key])))
-
-        if "status" in data and data["status"] in ("off", "none"):
-            fields_to_write.append(("status", data["status"]))
-
-        if "mode" in data:
-            fields_to_write.append(("mode", int(data["mode"])))
-
-        if "power" in data:
-            fields_to_write.append(("power", int(data["power"])))
-
-        if not fields_to_write:
-            return ApiResponse(True, None, None)
-
-        # Always include a sync timestamp so the radiator knows this is a fresh command
-        fields_to_write.append(
-            ("last_sync_datetime_app", round(datetime.now().timestamp() * 1000))
-        )
-
-        results: Dict[int, Any] = {}
-        auth_holder: dict[str, Any] = {"status": None}
-        errors: List[str] = []
-        auth_id = [0]
-        write_ids: List[int] = []
-        expected_write_responses = [0]
-        ws_done = threading.Event()
-        ws_connected = threading.Event()
+        payload["last_sync_datetime_app"] = round(datetime.now().timestamp() * 1000)
         auth_done = threading.Event()
-        closing = [False]
+        write_done = threading.Event()
+        statuses: Dict[str, Any] = {"auth": None, "write": None}
+        errors: List[str] = []
+        closing = False
 
         def on_message(ws, message):
             try:
-                msg = json.loads(message)
-                if msg.get("t") == "d" and "d" in msg:
-                    data_block = msg["d"]
-                    req_id = data_block.get("r")
-                    if req_id == auth_id[0] and "b" in data_block:
-                        auth_holder["status"] = data_block["b"].get("s")
-                        auth_done.set()
-                    elif req_id and req_id in write_ids and "b" in data_block:
-                        results[req_id] = data_block["b"].get("s")
-                        if len(results) >= expected_write_responses[0]:
-                            ws_done.set()
-            except Exception:
-                pass
+                block = json.loads(message).get("d", {})
+                request_id = block.get("r")
+                if request_id == 1:
+                    statuses["auth"] = block.get("b", {}).get("s")
+                    auth_done.set()
+                elif request_id == 2:
+                    statuses["write"] = block.get("b", {}).get("s")
+                    write_done.set()
+            except (ValueError, TypeError, AttributeError):
+                LOGGER.debug("Ignoring non-response WebSocket message")
 
         def on_error(ws, error):
-            if not closing[0] and error:
-                error_str = str(error)
-                if "NoneType" not in error_str:
-                    errors.append(error_str)
-                    auth_done.set()
-                    ws_done.set()
+            if not closing:
+                errors.append(str(error))
+                auth_done.set()
+                write_done.set()
 
-        def on_close(ws, code, msg):
+        def on_close(ws, code, message):
             auth_done.set()
-            ws_done.set()
+            write_done.set()
 
         def on_open(ws):
-            ws_connected.set()
             try:
-                auth_id[0] = 1
                 ws.send(
                     json.dumps(
                         {
                             "t": "d",
-                            "d": {
-                                "r": auth_id[0],
-                                "a": "auth",
-                                "b": {"cred": self.auth_token},
-                            },
+                            "d": {"r": 1, "a": "auth", "b": {"cred": self.auth_token}},
                         }
                     )
                 )
-            except Exception as e:
-                errors.append(str(e))
-                auth_done.set()
-                ws_done.set()
-
-        def send_writes(ws):
-            """Send write requests after auth is confirmed."""
-            try:
-                next_id = 2
-                for field, value in fields_to_write:
-                    write_ids.append(next_id)
-                    ws.send(
-                        json.dumps(
-                            {
-                                "t": "d",
-                                "d": {
-                                    "r": next_id,
-                                    "a": "p",
-                                    "b": {
-                                        "p": f"/devices/{device_id}/data/{field}",
-                                        "d": value,
-                                    },
-                                },
-                            }
-                        )
-                    )
-                    expected_write_responses[0] += 1
-                    next_id += 1
-                    time.sleep(0.1)
-            except Exception as e:
-                errors.append(str(e))
-                ws_done.set()
-
-        def safe_close(ws):
-            closing[0] = True
-            try:
-                if ws and hasattr(ws, "sock") and ws.sock:
-                    ws.close()
-            except Exception:
-                pass
+            except Exception as err:
+                on_error(ws, err)
 
         ws = websocket.WebSocketApp(
             self.firebase_ws_url,
@@ -1581,62 +1594,52 @@ class RointeAPI:
             on_error=on_error,
             on_close=on_close,
         )
-
-        ws_thread = threading.Thread(
+        worker = threading.Thread(
             target=lambda: ws.run_forever(sslopt={"cert_reqs": ssl.CERT_NONE}),
             daemon=True,
         )
-        ws_thread.start()
-
-        if not ws_connected.wait(timeout=5):
-            safe_close(ws)
-            return ApiResponse(False, None, "Connection timeout")
-
-        # Wait for auth response before sending writes
-        if not auth_done.wait(timeout=5):
-            LOGGER.warning("WebSocket write auth response timeout for %s", device_id)
-            safe_close(ws)
-            ws_thread.join(timeout=2)
-            return ApiResponse(False, None, "Auth response timeout")
-
-        if auth_holder["status"] != "ok":
-            LOGGER.warning(
-                "WebSocket write auth failed (status=%s) for %s",
-                auth_holder["status"],
-                device_id,
-            )
-            safe_close(ws)
-            ws_thread.join(timeout=2)
-
-            if _retry:
-                LOGGER.info("Forcing token refresh and retrying write for %s", device_id)
-                self.auth_token_expire_date = datetime.now() - timedelta(seconds=1)
-                return self._write_via_websocket(device_id, data, _retry=False)
-            return ApiResponse(False, None, "WebSocket auth failed")
-
-        # Auth succeeded, send writes
-        send_writes(ws)
-
-        ws_done.wait(timeout=8)
-        safe_close(ws)
-        ws_thread.join(timeout=2)
+        worker.start()
+        try:
+            if not auth_done.wait(timeout=5):
+                return ApiResponse(False, None, "Auth response timeout")
+            if statuses["auth"] == "ok" and not errors:
+                try:
+                    ws.send(
+                        json.dumps(
+                            {
+                                "t": "d",
+                                "d": {
+                                    "r": 2,
+                                    "a": "m",
+                                    "b": {
+                                        "p": f"/devices/{device_id}/data",
+                                        "d": payload,
+                                    },
+                                },
+                            }
+                        )
+                    )
+                except Exception as err:
+                    errors.append(str(err))
+                if not errors and not write_done.wait(timeout=8):
+                    return ApiResponse(False, None, "Write response timeout")
+        finally:
+            closing = True
+            ws.close()
+            worker.join(timeout=2)
 
         if errors:
             return ApiResponse(False, None, "; ".join(errors))
-
-        # Check for permission denied in write results
-        for req_id, status in results.items():
-            if isinstance(status, str) and "permission_denied" in status.lower():
-                if _retry:
-                    LOGGER.info(
-                        "Permission denied on write, forcing re-auth and retrying for %s",
-                        device_id,
-                    )
-                    self.auth_token_expire_date = datetime.now() - timedelta(seconds=1)
-                    return self._write_via_websocket(device_id, data, _retry=False)
-                return ApiResponse(False, None, "Permission denied after re-auth")
-
-        return ApiResponse(True, results, None)
+        auth_failed = statuses["auth"] != "ok"
+        permission_denied = statuses["write"] == "permission_denied"
+        if _retry and (auth_failed or permission_denied):
+            self.auth_token_expire_date = datetime.now() - timedelta(seconds=1)
+            return self._write_via_websocket(device_id, data, _retry=False)
+        if auth_failed:
+            return ApiResponse(False, None, "WebSocket authentication failed")
+        if statuses["write"] != "ok":
+            return ApiResponse(False, None, f"Write rejected: {statuses['write']}")
+        return ApiResponse(True, {2: "ok"}, None)
 
     def _get_nexa_device_key(self, device: RointeDevice) -> str:
         """Resolve the Nexa device key for Firebase paths."""

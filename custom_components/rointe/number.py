@@ -11,6 +11,7 @@ from homeassistant.components.number import (
     NumberEntityDescription,
     NumberMode,
 )
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import UnitOfTemperature
 from homeassistant.core import HomeAssistant
@@ -198,7 +199,6 @@ class RointeNumber(RointeRadiatorEntity, NumberEntity):
         api = self.coordinator.rointe_api
         field_name = self.entity_description.field_name
 
-        # For Nexa devices, use WebSocket
-        if api.use_nexa_ws:
-            device_key = api._get_nexa_device_key(device)
-            api._write_via_websocket(device_key, {field_name: value})
+        result = api.set_device_settings(device, {field_name: value})
+        if not result.success:
+            raise HomeAssistantError(result.error_message or "Unable to update device")
