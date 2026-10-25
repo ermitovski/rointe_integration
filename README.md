@@ -187,6 +187,15 @@ Set the target temperature for a specific mode.
 | `temperature` | Yes | Target temperature |
 | `mode` | No | Mode to set temperature for |
 
+## Schedule details
+
+Each radiator's Schedule Status sensor includes today's raw schedule, grouped
+Comfort/Eco/Off/Ice hours, and the next known mode change. `next_change_at` includes
+the date and timezone offset, including changes after midnight. The
+`schedule_active` attribute distinguishes an active schedule from one being
+inspected while the radiator is off or in manual mode. Schedules use Home
+Assistant's configured timezone and support both Nexa and Connect data formats.
+
 ## Nexa energy, cost and savings
 
 Nexa statistics come from the v4 API filtered by the radiator's serial number.

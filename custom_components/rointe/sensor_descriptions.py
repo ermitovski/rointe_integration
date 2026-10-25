@@ -22,6 +22,7 @@ from homeassistant.const import (
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.typing import StateType
 
+from .schedule import schedule_attributes
 from .rointesdk.device import RointeDevice
 from .rointesdk.model import ScheduleMode
 
@@ -208,7 +209,7 @@ SENSOR_DESCRIPTIONS = [
         icon="mdi:calendar-clock",
         value_fn=lambda radiator: _get_schedule_status(radiator),
         last_reset_fn=lambda radiator: None,
-        available_fn=lambda radiator: radiator.mode == "auto",
+        attributes_fn=schedule_attributes,
     ),
     # WiFi signal strength
     RointeSensorEntityDescription(
