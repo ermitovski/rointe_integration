@@ -48,7 +48,7 @@ class RointeNumberEntityDescription(
 
 NUMBER_DESCRIPTIONS: tuple[RointeNumberEntityDescription, ...] = (
     RointeNumberEntityDescription(
-        key="power_reduction", name="Power Reduction", icon="mdi:flash-minus",
+        key="power_reduction", name="Power Reduction", icon="mdi:tune-vertical",
         entity_category=EntityCategory.CONFIG,
         native_unit_of_measurement="%", native_min_value=0, native_max_value=30,
         native_step=5, mode=NumberMode.SLIDER, field_name="nominal_effective_power",

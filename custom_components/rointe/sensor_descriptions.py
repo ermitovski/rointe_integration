@@ -205,7 +205,7 @@ SENSOR_DESCRIPTIONS = [
         last_reset_fn=lambda radiator: None,
     ),
     RointeSensorEntityDescription(
-        key="configured_power", name="Configured Power", icon="mdi:flash-cog",
+        key="configured_power", name="Configured Power", icon="mdi:flash",
         device_class=SensorDeviceClass.POWER, native_unit_of_measurement=UnitOfPower.WATT,
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda device: device.nominal_effective_power,
