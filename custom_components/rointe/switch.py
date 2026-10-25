@@ -39,6 +39,16 @@ class RointeSwitchEntityDescription(
 
 SWITCH_DESCRIPTIONS: tuple[RointeSwitchEntityDescription, ...] = (
     RointeSwitchEntityDescription(
+        key="early_start", name="Early Start", icon="mdi:clock-start",
+        field_name="adelanto_enable",
+        value_fn=lambda device: bool(device._data.get("adelanto_enable")),
+    ),
+    RointeSwitchEntityDescription(
+        key="night_temperature_reduction", name="Night Temperature Reduction",
+        icon="mdi:weather-night", field_name="dont_disturb_decrease",
+        value_fn=lambda device: bool(device._data.get("dont_disturb_decrease")),
+    ),
+    RointeSwitchEntityDescription(
         key="window_detection",
         name="Window Detection",
         icon="mdi:window-open-variant",
@@ -180,6 +190,6 @@ class RointeSwitch(RointeRadiatorEntity, SwitchEntity):
         if not device.supports_setting(field_name):
             raise HomeAssistantError("This setting is not supported by this device")
 
-        result = api.set_device_settings(device, {field_name: value})
+        result = api.set_optional_settings(device, {field_name: value})
         if not result.success:
             raise HomeAssistantError(result.error_message or "Unable to update device")

@@ -352,3 +352,16 @@ sets manual mode, matching the Nexa app; ending Boost does not automatically
 restore a previous weekly programme. Select Auto afterwards when required.
 Only devices reporting supported timer fields offer this operation. Protocol
 writes are covered by mocked tests and still need live hardware validation.
+
+### Optional comfort and display controls
+
+Supported devices expose Early Start, Night Temperature Reduction, Night Start
+and Night End, Display Brightness (1–10), Standby Brightness (0–10), Sound Volume
+(0–10), and Display Timeout (always on, 10 or 30 seconds). Zero volume mutes the
+buzzer. The existing Do Not Disturb switch enables the night period; temperature
+reduction is a separate setting. Start/end times use the device's local clock,
+and an end earlier than the start represents a period crossing midnight.
+
+Only reported, compatible settings are created. Changes preserve the device's
+other reported night/display settings in the same command. Early start lets the
+device preheat for its own schedule; it does not create a Home Assistant timer.

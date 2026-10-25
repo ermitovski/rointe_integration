@@ -16,6 +16,8 @@ PLATFORMS: list[Platform] = [
     Platform.SENSOR,
     Platform.SWITCH,
     Platform.UPDATE,
+    Platform.SELECT,
+    Platform.TIME,
 ]
 CONF_USERNAME = "rointe_username"
 CONF_PASSWORD = "rointe_password"

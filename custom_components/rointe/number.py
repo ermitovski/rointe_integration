@@ -45,6 +45,21 @@ class RointeNumberEntityDescription(
 
 NUMBER_DESCRIPTIONS: tuple[RointeNumberEntityDescription, ...] = (
     RointeNumberEntityDescription(
+        key="standby_brightness", name="Standby Brightness", icon="mdi:brightness-4",
+        native_min_value=0, native_max_value=10, native_step=1,
+        field_name="backlight", value_fn=lambda device: device._data.get("backlight"),
+    ),
+    RointeNumberEntityDescription(
+        key="display_brightness", name="Display Brightness", icon="mdi:brightness-6",
+        native_min_value=1, native_max_value=10, native_step=1,
+        field_name="backlight_on", value_fn=lambda device: device._data.get("backlight_on"),
+    ),
+    RointeNumberEntityDescription(
+        key="sound_volume", name="Sound Volume", icon="mdi:volume-high",
+        native_min_value=0, native_max_value=10, native_step=1,
+        field_name="buzzer", value_fn=lambda device: device._data.get("buzzer"),
+    ),
+    RointeNumberEntityDescription(
         key="comfort_temperature",
         name="Comfort Temperature",
         icon="mdi:sun-thermometer",
@@ -212,6 +227,6 @@ class RointeNumber(RointeRadiatorEntity, NumberEntity):
         if not device.supports_setting(field_name):
             raise HomeAssistantError("This setting is not supported by this device")
 
-        result = api.set_device_settings(device, {field_name: value})
+        result = api.set_optional_settings(device, {field_name: value})
         if not result.success:
             raise HomeAssistantError(result.error_message or "Unable to update device")
