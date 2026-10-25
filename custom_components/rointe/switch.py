@@ -11,6 +11,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
+from .discovery import setup_description_entities
 from .const import DOMAIN
 from .coordinator import RointeDataUpdateCoordinator
 from .rointe_entity import RointeRadiatorEntity
@@ -105,15 +106,9 @@ async def async_setup_entry(
     """Set up Rointe switches from a config entry."""
     coordinator: RointeDataUpdateCoordinator = hass.data[DOMAIN][entry.entry_id]
 
-    entities: list[RointeSwitch] = []
-    for device_id, device in coordinator.devices.items():
-        for description in SWITCH_DESCRIPTIONS:
-            if description.available_fn(device):
-                entities.append(
-                    RointeSwitch(device, coordinator, description)
-                )
-
-    async_add_entities(entities)
+    setup_description_entities(
+        entry, coordinator, async_add_entities, SWITCH_DESCRIPTIONS, RointeSwitch
+    )
 
 
 class RointeSwitch(RointeRadiatorEntity, SwitchEntity):

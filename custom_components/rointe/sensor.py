@@ -11,6 +11,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import StateType
 
+from .discovery import setup_description_entities
 from .const import DOMAIN
 from .coordinator import RointeDataUpdateCoordinator
 from .rointe_entity import RointeRadiatorEntity
@@ -26,16 +27,9 @@ async def async_setup_entry(
     """Set up Rointe sensors from a config entry."""
     coordinator: RointeDataUpdateCoordinator = hass.data[DOMAIN][entry.entry_id]
 
-    entities: list[RointeSensor] = []
-    for device_id, device in coordinator.devices.items():
-        for description in SENSOR_DESCRIPTIONS:
-            # Check if this sensor is available for this device
-            if description.available_fn(device):
-                entities.append(
-                    RointeSensor(device, coordinator, description)
-                )
-
-    async_add_entities(entities)
+    setup_description_entities(
+        entry, coordinator, async_add_entities, SENSOR_DESCRIPTIONS, RointeSensor
+    )
 
 
 class RointeSensor(RointeRadiatorEntity, SensorEntity):
