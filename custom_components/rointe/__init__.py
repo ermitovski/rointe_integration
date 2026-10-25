@@ -7,7 +7,8 @@ from .rointesdk.rointe_api import ApiResponse, RointeAPI
 from homeassistant.util import dt as dt_util
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.const import EVENT_HOMEASSISTANT_STOP
+from homeassistant.core import Event, HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
 
 from .const import (
@@ -36,6 +37,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         entry.data[CONF_USERNAME],
         entry.data[CONF_PASSWORD],
         api_type=api_type,
+    )
+
+    async def async_close_api(event: Event | None = None) -> None:
+        await hass.async_add_executor_job(rointe_api.close)
+
+    # Home Assistant runs these callbacks on unload and failed setup attempts.
+    entry.async_on_unload(async_close_api)
+    entry.async_on_unload(
+        hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, async_close_api)
     )
 
     # Login to the Rointe API.

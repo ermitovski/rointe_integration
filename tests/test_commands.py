@@ -20,7 +20,8 @@ def api():
     client.firebase_ws_url = "wss://offline.invalid"
     client.auth_token = "offline-token"
     client._ensure_valid_auth = MagicMock(return_value=True)
-    return client
+    yield client
+    client.close()
 
 
 def mock_socket(monkeypatch, status="ok"):
@@ -35,7 +36,7 @@ def mock_socket(monkeypatch, status="ok"):
 
         def run_forever(self, **kwargs):
             self.callbacks["on_open"](self)
-            self.done.wait(2)
+            self.done.wait()
 
         def send(self, raw):
             request = json.loads(raw)["d"]
