@@ -80,7 +80,7 @@ This approach ensures the UI accurately reflects what the radiator is doing, eve
 
 ## Installation
 
-Version 3.2.1 requires Home Assistant 2026.10.4 or newer.
+Version 3.2.3 requires Home Assistant 2026.10.4 or newer.
 
 ### HACS (Recommended)
 
