@@ -365,3 +365,33 @@ and an end earlier than the start represents a period crossing midnight.
 Only reported, compatible settings are created. Changes preserve the device's
 other reported night/display settings in the same command. Early start lets the
 device preheat for its own schedule; it does not create a Home Assistant timer.
+
+### Nexa holiday schedules
+
+`rointe.set_holiday_schedule` replaces the selected heater's **entire installation**
+holiday schedule and enables it. Every heater in that Rointe installation is
+affected. Pass `periods` as an ordered, non-overlapping list; each period has
+`from` and `to` ISO datetimes with timezone offsets. Only the last `to` can be
+null for an indefinite absence. For example:
+
+```yaml
+action: rointe.set_holiday_schedule
+target:
+  entity_id: climate.living_room
+data:
+  periods:
+    - from: "2026-12-20T08:00:00+01:00"
+      to: "2026-12-28T18:00:00+01:00"
+```
+
+`rointe.clear_holiday_schedule` removes all periods and disables the installation
+schedule. Selecting several heaters in one installation applies the operation
+once. The Holiday Schedule sensor reports the master flag and periods, which
+are returned by Rointe in UTC. Enabled means that scheduling is enabled; it does
+not necessarily mean the current time falls in an absence period.
+
+The integration converts offsets to UTC and checks the server's master flag
+before toggling it. An uncertain toggle is not replayed automatically. On an
+unknown outcome, refresh the integration and inspect the Rointe app before
+retrying. Rointe's cloud holds these periods and executes them independently
+of Home Assistant. Live holiday transitions remain to be verified.

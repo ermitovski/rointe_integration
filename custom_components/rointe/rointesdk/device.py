@@ -152,6 +152,7 @@ class RointeDevice:
         self.product_model = data.get("product_model")
         self.installation_id = device_info.get("metadata", {}).get("installation_id")
         self.zone_id = device_info.get("metadata", {}).get("zone_id")
+        self.installation = device_info.get("metadata", {}).get("installation", {})
         firmware_data = device_info.get("firmware")
 
         self.name = data.get("name", "")

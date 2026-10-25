@@ -54,3 +54,34 @@ set_schedule:
       example: '{"0": "OOOCCCCCCCEEEECCCCCCOOO", "1": "OOOCCCCCCCEEEECCCCCCOOO"}'
       selector:
         object:
+
+set_holiday_schedule:
+  name: Set Holiday Schedule
+  description: >
+    Replace holiday periods and enable the schedule for the entire Nexa installation.
+    Affects every device in the same Rointe installation as the selected heater.
+    Times must include a timezone offset. Existing holiday periods are replaced.
+  target:
+    entity:
+      integration: rointe
+      domain: climate
+  fields:
+    periods:
+      name: Periods
+      description: >
+        Ordered list of periods with 'from' and 'to' ISO datetimes including
+        offsets. Only the last period may have a null 'to' for indefinite absence.
+      required: true
+      example: '[{"from": "2026-12-20T08:00:00+01:00", "to": "2026-12-28T18:00:00+01:00"}]'
+      selector:
+        object:
+
+clear_holiday_schedule:
+  name: Clear Holiday Schedule
+  description: >
+    Remove all holiday periods and disable the schedule for the entire Nexa
+    installation. Affects every device in the selected heater's installation.
+  target:
+    entity:
+      integration: rointe
+      domain: climate

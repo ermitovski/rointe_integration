@@ -68,6 +68,8 @@ class RointeAPI:
         self.firebase_app_key = FIREBASE_APP_KEY
         self.use_nexa_ws = False
         self._nexa_device_cache: Dict[str, Dict[str, Any]] = {}
+        self._nexa_installation_cache = {}
+        self._nexa_holiday_lock = threading.Lock()
         # (token_name, header_name) combo that last worked against the Nexa
         # installations endpoints; see _nexa_authenticated_get.
         self._nexa_auth_combo: Optional[tuple[str, str]] = None
@@ -440,6 +442,9 @@ class RointeAPI:
                 zones = data.get("rooms")
             else:
                 zones = data
+            self._nexa_installation_cache[installation_id] = {
+                key: data[key] for key in ("holidays", "holidaysMode", "timeZone") if key in data
+            } if isinstance(data, dict) else {}
             devices = self._extract_devices_any(zones, installation_id=installation_id)
             unique_devices = list(dict.fromkeys(devices))
             LOGGER.debug(
@@ -532,6 +537,7 @@ class RointeAPI:
             return
         cached = {**self._nexa_device_cache.get(device_id, {}), **dev,
             "installation_id": installation_id,
+            "installation": self._nexa_installation_cache.get(installation_id, {}),
             "zone_id": zone_id,
             "id": device_id,
             "name": dev.get("name"),
@@ -1360,6 +1366,74 @@ class RointeAPI:
                 return ApiResponse(False, None, f"Invalid energy statistics: {err}")
             self._nexa_energy_cache[device_id] = result
             return ApiResponse(True, result, None)
+
+    def _nexa_holiday_request(self, method, installation_id, suffix, body=None):
+        """Do not replay a toggle after an uncertain network/server failure."""
+        from urllib.parse import quote
+
+        url = f"{NEXA_INSTALLATIONS_URL}/{quote(str(installation_id), safe='')}/{suffix}"
+        for attempt in range(2):
+            token = self.nexa_token
+            if not token:
+                return ApiResponse(False, None, "Nexa token is unavailable")
+            try:
+                kwargs = {"headers": {"token": token, "Content-Type": "application/json"},
+                          "timeout": AUTH_TIMEOUT_SECONDS}
+                if body is not None:
+                    kwargs["json"] = body
+                response = requests.request(method, url, **kwargs)
+            except RequestException:
+                return ApiResponse(False, None, "Holiday request outcome is unknown; refresh before retrying")
+            if response.status_code == 401 and attempt == 0:
+                if self._refresh_nexa_credentials(token):
+                    continue
+            if not 200 <= response.status_code < 300:
+                return ApiResponse(False, None, f"Holiday request returned {response.status_code}; refresh before retrying")
+            try:
+                result = response.json()
+                data = result.get("data", result)
+                if not isinstance(data, dict):
+                    raise ValueError("Invalid installation response")
+            except (AttributeError, TypeError, ValueError):
+                return ApiResponse(False, None, "Holiday response was invalid; refresh before retrying")
+            return ApiResponse(True, data, None)
+        return ApiResponse(False, None, "Nexa re-authentication failed")
+
+    def set_holiday_schedule(self, installation_id, periods) -> ApiResponse:
+        """Replace periods and ensure the toggle matches the intended state."""
+        from .holidays import holiday_payload
+
+        if not self.use_nexa_ws or not installation_id:
+            return ApiResponse(False, None, "Holiday scheduling requires a Nexa installation")
+        try:
+            holidays = holiday_payload(periods)
+        except (TypeError, ValueError, OverflowError) as err:
+            return ApiResponse(False, None, str(err))
+        with self._nexa_holiday_lock:
+            # Verify this account can read the selected installation before writing.
+            current = self.get_installation_by_id(installation_id)
+            if not current.success:
+                return current
+            result = self._nexa_holiday_request("PUT", installation_id, "holidays", {"holidays": holidays})
+            if not result.success:
+                return result
+            desired = bool(holidays)
+            flag = result.data.get("holidaysMode")
+            if not isinstance(flag, bool):
+                current = self.get_installation_by_id(installation_id)
+                if not current.success:
+                    return current
+                flag = current.data.get("holidaysMode")
+            if not isinstance(flag, bool):
+                return ApiResponse(False, None, "Unable to verify holiday flag; no toggle was sent")
+            if flag != desired:
+                result = self._nexa_holiday_request("PATCH", installation_id, "holidaysMode")
+                if not result.success:
+                    return result
+                if result.data.get("holidaysMode") is not desired:
+                    return ApiResponse(False, None, "Holiday flag could not be verified; refresh before retrying")
+            self._nexa_installation_cache.pop(installation_id, None)
+            return result
 
     def set_optional_settings(self, device, changes) -> ApiResponse:
         """Apply validated optional settings with reported companion values."""
