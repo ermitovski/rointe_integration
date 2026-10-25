@@ -98,7 +98,7 @@ BINARY_SENSOR_DESCRIPTIONS: tuple[RointeBinarySensorEntityDescription, ...] = (
         name="Charging",
         device_class=BinarySensorDeviceClass.BATTERY_CHARGING,
         value_fn=lambda device: device.charging,
-        available_fn=lambda device: device.type == "storage_heater",
+        available_fn=lambda device: device.type == "storage_heater" and device._data.get("charging") is not None,
     ),
     RointeBinarySensorEntityDescription(
         key="legionella",

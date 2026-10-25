@@ -395,3 +395,46 @@ before toggling it. An uncertain toggle is not replayed automatically. On an
 unknown outcome, refresh the integration and inspect the Rointe app before
 retrying. Rointe's cloud holds these periods and executes them independently
 of Home Assistant. Live holiday transitions remain to be verified.
+
+### Nexa storage-heater charging
+
+Storage heaters are discovered using `product_type: 5` or the `storageheater`
+type, without assuming every device is an Onyx. Charge Level and Charging remain
+physical readings from the device. Optional configuration is read from, and
+written to, the owning **Rointe zone**; every storage heater sharing that zone
+can be affected. Charging controls are named Zone Minimum/Maximum Charge, Zone
+Smart Charging, Zone Additional Charge, and Zone Extra Element in each mode.
+Storage-heater Silence Mode also applies to the zone.
+
+Charge limits follow the app's ranges: minimum 0–30%, maximum 60–100%, in 5%
+steps. Both values are written together using fresh zone state. They bound the
+Smart Charging target, and are not a way to force charging off. Additional
+Charge is an allowance of 0–7 hours outside the scheduled window. Extra Element
+switches control permission to use direct heating in Auto, Manual, Boost and
+Holiday modes. Turning off direct heating permits stored-heat-only operation
+in that mode; it does not claim to measure power.
+
+`rointe.set_charging_schedule` accepts partial Monday–Sunday days numbered 0–6,
+with 24 characters per day: `1` allows charging, `0` disallows it. The action
+selects custom programming and preserves omitted days. For example:
+
+```yaml
+action: rointe.set_charging_schedule
+target:
+  entity_id: climate.storage_heater
+data:
+  schedule:
+    "0": "111111100000000000000000"
+```
+
+Smart Charging decides how much to charge within the permitted hours; Additional
+Charge allows spill outside them. Use Rointe's daily consumption statistics for
+energy. The integration leaves instantaneous storage-heater power unknown when
+there is no measured value, rather than estimating it from charging state or
+nameplate wattage. Command acknowledgement confirms a cloud write, not that the
+heater has already applied it. Storage writes need verification on live hardware.
+
+The zone-command approach is also described in the community's
+[Onyx field observations](https://github.com/Atmaybury-25/rointe-nexa-hacs/blob/main/docs/onyx-field-map.md).
+It is limited to these explicit storage configuration controls; individual
+radiator commands keep their existing device destination.

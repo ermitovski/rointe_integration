@@ -145,6 +145,7 @@ class RointeDevice:
 
         data = device_info["data"]
         self._data = data  # Keep raw data for debugging
+        self.commanded = device_info.get("commanded", {})
         self.type = self.device_type(data)
         self.product_version = str(data.get("product_version", "")).lower()
         self.product_type = data.get("product_type")
@@ -392,6 +393,11 @@ class RointeDevice:
         if self.rointe_product:
             return self.rointe_product.product_name
         return f"{self.type.replace('_', ' ').title()} {self.product_version}".strip()
+
+    def supports_storage_setting(self, field: str) -> bool:
+        """Storage writes are zone commands and need both reported channels."""
+        return (self.type == "storage_heater" and bool(self.zone_id)
+                and self.supports_setting(field) and self.commanded.get(field) is not None)
 
     def supports_setting(self, field: str) -> bool:
         """Require a reported field and honor the Nexa app's family restrictions.

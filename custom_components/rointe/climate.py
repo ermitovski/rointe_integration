@@ -86,16 +86,7 @@ class RointeHaClimate(RointeRadiatorEntity, ClimateEntity):
     def target_temperature(self) -> float | None:
         """Return the current target temperature or None if the device is off."""
 
-        # Check if device is off
-        if not self._radiator.power:
-            return None
-
-        # In AUTO mode, use the schedule-aware effective target temperature
-        if self._radiator.mode == RointeOperationMode.AUTO:
-            return self._radiator.get_effective_target_temperature()
-
-        # In MANUAL mode, return the current temp setpoint
-        return self._radiator.temp
+        return self._radiator.get_effective_target_temperature()
 
     @property
     def current_temperature(self) -> float:

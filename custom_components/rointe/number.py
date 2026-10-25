@@ -22,6 +22,7 @@ from .const import DOMAIN
 from .coordinator import RointeDataUpdateCoordinator
 from .rointe_entity import RointeRadiatorEntity
 from .rointesdk.device import RointeDevice
+from .rointesdk.storage import STORAGE_FIELDS
 
 
 @dataclass
@@ -44,6 +45,26 @@ class RointeNumberEntityDescription(
 
 
 NUMBER_DESCRIPTIONS: tuple[RointeNumberEntityDescription, ...] = (
+    RointeNumberEntityDescription(
+        key="charge_percentage_min", name="Zone Minimum Charge", icon="mdi:battery-low",
+        native_unit_of_measurement="%", native_min_value=0, native_max_value=30, native_step=5,
+        field_name="charge_percentage_min", value_fn=lambda device: device.commanded.get("charge_percentage_min"),
+        available_fn=lambda device: device.supports_storage_setting("charge_percentage_min")
+            and device.supports_storage_setting("charge_percentage_limit"),
+    ),
+    RointeNumberEntityDescription(
+        key="charge_percentage_limit", name="Zone Maximum Charge", icon="mdi:battery-high",
+        native_unit_of_measurement="%", native_min_value=60, native_max_value=100, native_step=5,
+        field_name="charge_percentage_limit", value_fn=lambda device: device.commanded.get("charge_percentage_limit"),
+        available_fn=lambda device: device.supports_storage_setting("charge_percentage_min")
+            and device.supports_storage_setting("charge_percentage_limit"),
+    ),
+    RointeNumberEntityDescription(
+        key="additional_charge", name="Zone Additional Charge", icon="mdi:clock-plus-outline",
+        native_unit_of_measurement="h", native_min_value=0, native_max_value=7, native_step=1,
+        field_name="additional_charge", value_fn=lambda device: device.commanded.get("additional_charge"),
+        available_fn=lambda device: device.supports_storage_setting("additional_charge"),
+    ),
     RointeNumberEntityDescription(
         key="standby_brightness", name="Standby Brightness", icon="mdi:brightness-4",
         native_min_value=0, native_max_value=10, native_step=1,
@@ -227,6 +248,7 @@ class RointeNumber(RointeRadiatorEntity, NumberEntity):
         if not device.supports_setting(field_name):
             raise HomeAssistantError("This setting is not supported by this device")
 
-        result = api.set_optional_settings(device, {field_name: value})
+        setter = api.set_storage_settings if field_name in STORAGE_FIELDS else api.set_optional_settings
+        result = setter(device, {field_name: value})
         if not result.success:
             raise HomeAssistantError(result.error_message or "Unable to update device")

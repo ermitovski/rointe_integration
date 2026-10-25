@@ -70,6 +70,7 @@ class RointeAPI:
         self._nexa_device_cache: Dict[str, Dict[str, Any]] = {}
         self._nexa_installation_cache = {}
         self._nexa_holiday_lock = threading.Lock()
+        self._nexa_storage_lock = threading.Lock()
         # (token_name, header_name) combo that last worked against the Nexa
         # installations endpoints; see _nexa_authenticated_get.
         self._nexa_auth_combo: Optional[tuple[str, str]] = None
@@ -753,13 +754,16 @@ class RointeAPI:
 
         return ApiResponse(True, response.json(), None)
 
-    @staticmethod
-    def _enrich_nexa_device(info, metadata):
+    def _enrich_nexa_device(self, info, metadata):
         """Retain inventory identity when absent from realtime state."""
         info = {**info, "data": dict(info.get("data", {})), "metadata": metadata}
         for key in ("product_type", "product_brand", "product_model", "product_version"):
             if info["data"].get(key) is None and metadata.get(key) is not None:
                 info["data"][key] = metadata[key]
+        if RointeDevice.device_type(info["data"]) == "storage_heater" and metadata.get("zone_id"):
+            zone = self._read_via_websocket(f"/zones/{metadata['zone_id']}/data")
+            if isinstance(zone, dict):
+                info["commanded"] = zone
         return info
 
     def get_latest_energy_stats(
@@ -1367,6 +1371,22 @@ class RointeAPI:
             self._nexa_energy_cache[device_id] = result
             return ApiResponse(True, result, None)
 
+    def set_storage_settings(self, device, changes) -> ApiResponse:
+        """Apply storage controls to the owning zone; never redirect other families."""
+        from .storage import prepare_storage_settings
+
+        if not self.use_nexa_ws or device.type != "storage_heater" or not device.zone_id:
+            return ApiResponse(False, None, "Storage controls require a Nexa storage-heater zone")
+        with self._nexa_storage_lock:
+            commanded = self._read_via_websocket(f"/zones/{device.zone_id}/data")
+            if not isinstance(commanded, dict):
+                return ApiResponse(False, None, "Unable to read storage zone settings")
+            try:
+                payload = prepare_storage_settings(device, commanded, changes)
+            except (TypeError, ValueError, OverflowError) as err:
+                return ApiResponse(False, None, str(err))
+            return self._write_via_websocket(self._get_nexa_device_key(device), payload, zone_id=device.zone_id)
+
     def _nexa_holiday_request(self, method, installation_id, suffix, body=None):
         """Do not replay a toggle after an uncertain network/server failure."""
         from urllib.parse import quote
@@ -1508,7 +1528,7 @@ class RointeAPI:
         return self._send_patch_request(url, {"auth": self.auth_token}, body)
 
     @staticmethod
-    def _validate_schedule(schedule: Any) -> Dict[str, str]:
+    def _validate_schedule(schedule: Any, alphabet="CEO") -> Dict[str, str]:
         """Validate partial weekly schedules before sending them to a radiator."""
         if not isinstance(schedule, dict) or not schedule:
             raise ValueError("Schedule must be a non-empty dictionary.")
@@ -1519,13 +1539,13 @@ class RointeAPI:
                 raise ValueError("Schedule days must be between 0 and 6.")
             if not isinstance(hours, str) or len(hours) != 24:
                 raise ValueError(f"Schedule for day {day} must contain 24 hours.")
-            if any(char not in "CEO" for char in hours.upper()):
-                raise ValueError("Schedule hours must be C, E or O.")
+            if any(char not in alphabet for char in hours.upper()):
+                raise ValueError(f"Schedule hours must use only {alphabet}.")
             result[key] = hours.upper()
         return result
 
     def _write_via_websocket(
-        self, device_id: str, data: Dict[str, Any], _retry: bool = True
+        self, device_id: str, data: Dict[str, Any], _retry: bool = True, *, zone_id=None
     ) -> ApiResponse:
         """Write an acknowledged, atomic settings update to Firebase (Nexa)."""
         supported = {
@@ -1537,6 +1557,16 @@ class RointeAPI:
             "mode",
             "power",
             "schedule",
+            "charge_smart",
+            "charge_percentage_min",
+            "charge_percentage_limit",
+            "additional_charge",
+            "schedule_charging",
+            "schedule_charge_type",
+            "res_auto_config",
+            "res_man_config",
+            "res_boost_config",
+            "res_holiday_config",
             "timer_mode",
             "timer_time",
             "timer_temp",
@@ -1571,6 +1601,9 @@ class RointeAPI:
                     payload.pop("schedule")
                 ).items():
                     payload[f"schedule/{day}"] = hours
+            if "schedule_charging" in payload:
+                for day, hours in self._validate_schedule(payload.pop("schedule_charging"), "01").items():
+                    payload[f"schedule_charging/{day}"] = hours
             for key in ("temp", "comfort", "eco", "ice", "um_min_temp", "um_max_temp", "timer_temp", "timer_config_temp"):
                 if key in payload:
                     value = float(payload[key])
@@ -1589,12 +1622,12 @@ class RointeAPI:
 
         payload["last_sync_datetime_app"] = round(datetime.now().timestamp() * 1000)
         response = nexa_ws.request(
-            "m", {"p": f"/devices/{device_id}/data", "d": payload}
+            "m", {"p": f"/zones/{zone_id}/data" if zone_id else f"/devices/{device_id}/data", "d": payload}
         )
         status = response.get("s") if response is not None else None
         if _retry and (response is None or status == "permission_denied"):
             self._force_nexa_reauth()
-            return self._write_via_websocket(device_id, data, _retry=False)
+            return self._write_via_websocket(device_id, data, _retry=False, zone_id=zone_id)
         if status != "ok":
             return ApiResponse(False, None, f"Write rejected or unacknowledged: {status}")
         return ApiResponse(True, response, None)

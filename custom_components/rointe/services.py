@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 import voluptuous as vol
 
@@ -120,7 +119,12 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         await apply(call, lambda api, device: api.set_holiday_schedule(
             device.installation_id, []), installation_scope=True)
 
+    async def set_charging_schedule(call: ServiceCall) -> None:
+        await apply(call, lambda api, device: api.set_storage_settings(
+            device, {"schedule_charging": call.data[ATTR_SCHEDULE]}))
+
     for service, handler, schema in (
+        ("set_charging_schedule", set_charging_schedule, SERVICE_SET_SCHEDULE_SCHEMA),
         ("set_holiday_schedule", set_holiday_schedule, vol.Schema({
             vol.Required(ATTR_ENTITY_ID): cv.entity_ids, vol.Required("periods"): [dict],
         })),
