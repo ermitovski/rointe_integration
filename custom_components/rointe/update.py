@@ -13,6 +13,7 @@ from homeassistant.components.update import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
@@ -26,8 +27,19 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up the radiator sensors from the config entry."""
+    """Set up firmware updates where the API supports checking for them."""
     coordinator: RointeDataUpdateCoordinator = hass.data[DOMAIN][entry.entry_id]
+
+    if coordinator.rointe_api.use_nexa_ws:
+        registry = er.async_get(hass)
+        for entity in er.async_entries_for_config_entry(registry, entry.entry_id):
+            if (
+                entity.domain == "update"
+                and entity.platform == DOMAIN
+                and entity.unique_id.endswith("-fw_update_available")
+            ):
+                registry.async_remove(entity.entity_id)
+        return
 
     add_entities = partial(
         coordinator.add_entities_for_seen_keys,
