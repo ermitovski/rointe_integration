@@ -1361,6 +1361,16 @@ class RointeAPI:
             self._nexa_energy_cache[device_id] = result
             return ApiResponse(True, result, None)
 
+    def set_optional_settings(self, device, changes) -> ApiResponse:
+        """Apply validated optional settings with reported companion values."""
+        from .controls import prepare_optional_settings
+
+        try:
+            payload = prepare_optional_settings(device, changes)
+        except (TypeError, ValueError, OverflowError) as err:
+            return ApiResponse(False, None, str(err))
+        return self.set_device_settings(device, payload)
+
     def set_device_boost(self, device, duration_seconds, temperature=None) -> ApiResponse:
         """Use the Nexa app's timer protocol, with one atomic acknowledged write."""
         if not self.use_nexa_ws:
@@ -1464,6 +1474,14 @@ class RointeAPI:
             "block_remote",
             "pir_mode",
             "dont_disturb_mode",
+            "dont_disturb_start",
+            "dont_disturb_end",
+            "dont_disturb_decrease",
+            "adelanto_enable",
+            "backlight",
+            "backlight_on",
+            "backlight_time",
+            "buzzer",
             "ice_mode",
             "user_mode",
             "um_min_temp",
