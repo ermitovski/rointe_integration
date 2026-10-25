@@ -4,6 +4,8 @@ AUTH_HOST = "https://www.googleapis.com"
 AUTH_VERIFY_URL = "/identitytoolkit/v3/relyingparty/verifyPassword"
 AUTH_ACCT_INFO_URL = "/identitytoolkit/v3/relyingparty/getAccountInfo"
 AUTH_TIMEOUT_SECONDS = 15
+# Separate connection and read deadlines for legacy HTTP requests.
+HTTP_TIMEOUT_SECONDS = (5, 15)
 
 AUTH_REFRESH_ENDPOINT = "https://securetoken.googleapis.com/v1/token"
 
