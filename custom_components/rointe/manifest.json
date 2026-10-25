@@ -1,12 +1,17 @@
 {
   "domain": "rointe",
   "name": "Rointe Heaters",
-  "codeowners": ["@jyewman"],
+  "codeowners": [
+    "@ermitovski",
+    "@JYewman"
+  ],
   "config_flow": true,
-  "documentation": "https://github.com/jyewman/rointe-hacs",
+  "documentation": "https://github.com/ermitovski/rointe_integration",
   "integration_type": "hub",
   "iot_class": "cloud_polling",
-  "issue_tracker": "https://github.com/jyewman/rointe-hacs/issues",
-  "requirements": ["websocket-client>=1.7.0"],
-  "version": "3.0.5"
+  "issue_tracker": "https://github.com/ermitovski/rointe_integration/issues",
+  "requirements": [
+    "websocket-client>=1.7.0"
+  ],
+  "version": "3.1.0"
 }

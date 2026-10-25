@@ -1,5 +1,27 @@
 # Changelog
 
+## v3.1.0 (2026-10-25)
+
+### Added
+- Per-radiator Nexa v4 consumption, daily cost, and savings statistics, with independent caching and token renewal (#4).
+- Today's schedule periods and the next change across midnight and daylight-saving transitions (#5).
+- Persistent Nexa energy totals across daily resets and Home Assistant restarts (#6).
+- A regression suite with 71 passing tests against Home Assistant 2026.10.4.
+
+### Fixed
+- Deliver schedule, boost, lock, and temperature-limit commands; require an explicit Firebase acknowledgement and surface failures (#1).
+- Respect disabled frost protection in scheduled off periods and keep climate, power, and heating status consistent (#2).
+- Retain radiators across refreshes and discover newly relevant entities without reloading (#3).
+
+### Installation
+- Requires Home Assistant 2026.10.4 or newer, matching the tested baseline.
+- Add `https://github.com/ermitovski/rointe_integration` to HACS as an Integration, install version 3.1.0, then restart Home Assistant.
+- Existing energy entity unique IDs are preserved.
+
+### Validation notes
+- Automated checks use mocked cloud responses; live Nexa v4 statistics and radiator command behavior have not been verified on hardware.
+- Persistent totals accumulate observed daily readings and cannot reconstruct consumption missed while Home Assistant was offline.
+
 ## v3.0.5 (2026-09-17)
 
 ### Fixed

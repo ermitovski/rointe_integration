@@ -14,6 +14,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Verify release version
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          python3 - <<'PYTHON'
+          import json
+          import os
+          from pathlib import Path
+
+          tag_version = os.environ["RELEASE_TAG"].removeprefix("v")
+          manifest_version = json.loads(Path("custom_components/rointe/manifest.json").read_text())["version"]
+          if manifest_version != tag_version:
+              raise SystemExit(f"Tag {tag_version} does not match manifest {manifest_version}")
+          PYTHON
+
       - name: Get version from tag
         id: version
         run: echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
@@ -23,7 +38,7 @@ jobs:
         run: |
           # Extract the changelog section for this version
           version="${GITHUB_REF#refs/tags/v}"
-          changelog=$(awk "/^## \[${version}\]/{found=1; next} /^## \[/{if(found) exit} found{print}" CHANGELOG.md)
+          changelog=$(awk -v heading="## v${version} " 'index($0, heading) == 1 {found=1; next} /^## / && found {exit} found {print}' CHANGELOG.md)
           if [ -z "$changelog" ]; then
             changelog="Release ${{ steps.version.outputs.version }}"
           fi

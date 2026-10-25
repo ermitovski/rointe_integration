@@ -1,8 +1,8 @@
 # Rointe Heaters
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
-[![GitHub Release](https://img.shields.io/github/v/release/JYewman/rointe_integration?style=flat-square)](https://github.com/JYewman/rointe_integration/releases)
-[![GitHub Issues](https://img.shields.io/github/issues/JYewman/rointe_integration?style=flat-square)](https://github.com/JYewman/rointe_integration/issues)
+[![GitHub Release](https://img.shields.io/github/v/release/ermitovski/rointe_integration?style=flat-square)](https://github.com/ermitovski/rointe_integration/releases)
+[![GitHub Issues](https://img.shields.io/github/issues/ermitovski/rointe_integration?style=flat-square)](https://github.com/ermitovski/rointe_integration/issues)
 
 Home Assistant integration for Rointe electric radiators. Control your Rointe heating devices directly from Home Assistant with full climate entity support.
 
@@ -78,15 +78,17 @@ This approach ensures the UI accurately reflects what the radiator is doing, eve
 
 ## Installation
 
+Version 3.1.0 requires Home Assistant 2026.10.4 or newer.
+
 ### HACS (Recommended)
 
-[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=JYewman&repository=rointe_integration&category=integration)
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=ermitovski&repository=rointe_integration&category=integration)
 
 1. Click the button above, or manually:
    1. Open HACS in Home Assistant
    2. Click the three dots in the top right corner
    3. Select **Custom repositories**
-   4. Add the repository URL: `https://github.com/JYewman/rointe_integration`
+   4. Add the repository URL: `https://github.com/ermitovski/rointe_integration`
    5. Select **Integration** as the category
    6. Click **Add**
 2. Search for "Rointe" in HACS and install it
@@ -94,7 +96,7 @@ This approach ensures the UI accurately reflects what the radiator is doing, eve
 
 ### Manual Installation
 
-1. Download the [latest release](https://github.com/JYewman/rointe_integration/releases)
+1. Download the [latest release](https://github.com/ermitovski/rointe_integration/releases)
 2. Extract the `custom_components/rointe` folder to your Home Assistant `config/custom_components/` directory
 3. Restart Home Assistant
 
@@ -206,7 +208,7 @@ assigned an estimated share of installation or zone totals.
 Statistics are cached per radiator for five minutes, separately from the
 15-second state refresh, and refreshed at the start of a new local day. Missing
 or invalid statistics produce an unknown value instead of invented consumption.
-The v4 endpoint must be verified with your account before deployment.
+Nexa v4 statistics are covered by mocked API tests; verify readings against the Rointe app on your installation.
 
 The Nexa energy total survives Home Assistant restarts. Its attributes retain the
 last daily reading, its local date, and the cumulative offset. A new calendar day
@@ -272,7 +274,7 @@ If you previously used an older version of this integration:
 
 Found a bug or have a feature request? Please open an issue on GitHub:
 
-**[Open an Issue](https://github.com/JYewman/rointe_integration/issues)**
+**[Open an Issue](https://github.com/ermitovski/rointe_integration/issues)**
 
 When reporting a bug, please include:
 
@@ -291,13 +293,13 @@ Contributions are welcome via pull requests.
 4. Push to the branch (`git push origin feature/my-feature`)
 5. Open a Pull Request
 
-**[View Open Pull Requests](https://github.com/JYewman/rointe_integration/pulls)**
+**[View Open Pull Requests](https://github.com/ermitovski/rointe_integration/pulls)**
 
 ### Development Setup
 
 ```bash
 # Clone your fork
-git clone https://github.com/JYewman/rointe_integration.git
+git clone https://github.com/ermitovski/rointe_integration.git
 
 # Copy to HA custom_components for testing
 cp -r custom_components/rointe /path/to/ha/config/custom_components/
