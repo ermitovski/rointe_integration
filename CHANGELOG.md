@@ -1,5 +1,20 @@
 # Changelog
 
+## v3.2.2 (2026-10-25)
+
+### Fixed
+- Remove unsupported firmware update entities for Nexa accounts instead of showing Unknown; legacy firmware update checks and installed firmware version reporting are retained (#21).
+- Require reported fields for optional lock, connectivity, pilot-wire, window, surface-temperature and Wi-Fi statuses, and apply model restrictions to presence and timer sensors.
+- Preserve reported false values, read-only local-lock status and discovery of newly reported sensors without duplicate entities.
+- Recognize Nexa's `acs` water-heater family for Legionella Protection Running.
+
+### Installation
+- Update through HACS and restart Home Assistant. Requires Home Assistant 2026.10.4 or newer.
+- Existing Nexa firmware update entries are removed when the integration loads. Previously saved optional sensors become unavailable while their required data is absent.
+
+### Validation
+- 297 automated regression tests pass against Home Assistant 2026.10.4 / Python 3.14, with mocked cloud responses.
+
 ## v3.2.1 (2026-10-25)
 
 ### Fixed
