@@ -1,10 +1,19 @@
 # Changelog
 
-## Unreleased
+## v3.1.1 (2026-10-25)
 
-- Reuse one authenticated Nexa WebSocket for polling and atomic commands, with keep-alives and bounded reconnection. Adapted from alex1075's proposal in JYewman/rointe_integration#9.
+### Improved
+- Reuse one authenticated Nexa WebSocket for polling and atomic commands, with keep-alives and bounded reconnection (#8). Adapted from alex1075's proposal in [JYewman/rointe_integration#9](https://github.com/JYewman/rointe_integration/pull/9).
 - Close the connection permanently on unload, failed setup, and Home Assistant shutdown; unfinished requests cannot reopen it.
 - Preserve schedule, boost, lock, temperature-limit validation and explicit write acknowledgements. State updates still poll every 15 seconds.
+
+### Packaging
+- Preserve upstream integration and SDK attribution, and include both MIT license notices in the installation ZIP (#7).
+
+### Validation notes
+- 95 regression tests pass against Home Assistant 2026.10.4; HACS and Hassfest validation pass for the connection changes.
+- Cloud connections are mocked; live radiator behavior remains to be verified.
+- Requires Home Assistant 2026.10.4 or newer. Update through HACS and restart Home Assistant.
 
 ## v3.1.0 (2026-10-25)
 
