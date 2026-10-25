@@ -1,7 +1,5 @@
 """Identify device families and avoid controls for unused shared firmware fields."""
 
-from types import SimpleNamespace
-from unittest.mock import MagicMock
 
 import pytest
 

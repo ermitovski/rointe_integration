@@ -85,3 +85,24 @@ clear_holiday_schedule:
     entity:
       integration: rointe
       domain: climate
+
+set_charging_schedule:
+  name: Set Zone Charging Schedule
+  description: >
+    Set charging hours for a Nexa storage-heater zone. Affects every storage
+    heater sharing that Rointe zone. Days omitted from the update are preserved.
+    Smart charging and additional-charge allowance can change actual charging time.
+  target:
+    entity:
+      integration: rointe
+      domain: climate
+  fields:
+    schedule:
+      name: Schedule
+      description: >
+        Dictionary with day numbers 0–6 (Monday–Sunday), each a 24-character
+        string: '1' allows charging in that hour, '0' disallows it.
+      required: true
+      example: '{"0": "111111100000000000000000"}'
+      selector:
+        object:

@@ -86,3 +86,15 @@ async def test_time_and_timeout_entities_use_local_seconds_and_refresh(device):
     with pytest.raises(HomeAssistantError):
         await select.async_select_option("15 seconds")
     assert coordinator.async_request_refresh.await_count == 2
+
+
+def test_controls_respect_physical_off_and_limited_mode(device):
+    device._data["power"] = 0
+    with pytest.raises(ValueError, match="switched off"):
+        prepare_optional_settings(device, {"backlight": 2})
+    device._data["power"] = 1  # Standby can still be configured.
+    assert prepare_optional_settings(device, {"backlight": 2})["backlight"] == 2
+    device.user_mode = True
+    with pytest.raises(ValueError, match="limited mode"):
+        prepare_optional_settings(device, {"adelanto_enable": True})
+    assert prepare_optional_settings(device, {"buzzer": 0})["buzzer"] == 0

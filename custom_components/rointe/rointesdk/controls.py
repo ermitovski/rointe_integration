@@ -11,6 +11,13 @@ OPTIONAL_FIELDS = frozenset((*DISPLAY_FIELDS, *NIGHT_FIELDS, "adelanto_enable"))
 
 def prepare_optional_settings(device, changes: dict) -> dict:
     """Preserve reported companion values and reject invalid optional updates."""
+    if set(changes).intersection(OPTIONAL_FIELDS):
+        power = device._data.get("power")
+        if not isinstance(power, bool) and power == 0:
+            raise ValueError("The device is switched off at the unit")
+        restricted = {"adelanto_enable", *NIGHT_FIELDS}
+        if set(changes).intersection(restricted) and (device.user_mode or device.pilot_mode):
+            raise ValueError("Disable limited mode and pilot mode before changing early start or night mode")
     payload = dict(changes)
     for key in changes:
         if not device.supports_setting(key):

@@ -54,7 +54,7 @@ def _get_heating_status(device: RointeDevice) -> str:
     return "maintaining" if device.status_warming == 1 else "heating"
 
 
-def _get_effective_power(device: RointeDevice) -> float:
+def _get_effective_power(device: RointeDevice) -> float | None:
     """Get effective power usage, accounting for stale Firebase data.
 
     Mirrors RointeClimate.hvac_action: status_warming can be stale (stuck
@@ -64,6 +64,9 @@ def _get_effective_power(device: RointeDevice) -> float:
     status_warming is only used to detect the lower-power "maintaining"
     state, never to zero the result back out.
     """
+    # Charging state and nominal power do not measure an inverter storage heater.
+    if device.type == "storage_heater":
+        return device.energy_data.effective_power if device.energy_data and device.energy_data.effective_power > 0 else None
     # If device is off or target temp reached, power is 0
     if not device.power:
         return 0
@@ -98,6 +101,13 @@ def _get_schedule_status(device: RointeDevice) -> str:
 
 
 SENSOR_DESCRIPTIONS = [
+    RointeSensorEntityDescription(
+        key="charging_schedule", name="Zone Charging Schedule", icon="mdi:calendar-clock",
+        value_fn=lambda device: "custom" if device.commanded.get("schedule_charge_type") == 0 else "preset",
+        last_reset_fn=lambda device: None,
+        available_fn=lambda device: device.supports_storage_setting("schedule_charging"),
+        attributes_fn=lambda device: {"days": device.commanded.get("schedule_charging"), "zone_id": device.zone_id},
+    ),
     RointeSensorEntityDescription(
         key="holiday_schedule", name="Holiday Schedule", icon="mdi:bag-suitcase",
         value_fn=lambda device: "enabled" if device.installation.get("holidaysMode") else "disabled",
@@ -265,7 +275,7 @@ SENSOR_DESCRIPTIONS = [
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda radiator: radiator.charge_percentage,
         last_reset_fn=lambda radiator: None,
-        available_fn=lambda radiator: radiator.type == "storage_heater",
+        available_fn=lambda radiator: radiator.type == "storage_heater" and radiator._data.get("charge_percentage") is not None,
     ),
     # Firmware version
     RointeSensorEntityDescription(

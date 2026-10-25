@@ -1,6 +1,9 @@
 """Boost uses the app's timer fields, never the obsolete boost_* schema."""
 
 from datetime import datetime, timezone
+from types import SimpleNamespace
+
+from custom_components.rointe.climate import RointeHaClimate
 from unittest.mock import MagicMock
 
 import pytest
@@ -60,6 +63,7 @@ def test_active_expired_and_cancelled_timer_drive_target_and_remaining(setup):
     assert device.boost_active
     assert device.boost_countdown == 90
     assert device.target_temperature == 24
+    assert RointeHaClimate.target_temperature.fget(SimpleNamespace(_radiator=device)) == 24
     device.timer_time = now - 1
     assert not device.boost_active
     assert device.boost_countdown == 0
@@ -67,3 +71,10 @@ def test_active_expired_and_cancelled_timer_drive_target_and_remaining(setup):
     device.timer_time = now + 90
     device.timer_mode = False
     assert not device.boost_active
+
+
+def test_boost_cannot_override_physical_off(setup):
+    api, device, _ = setup
+    device._data["power"] = 0
+    assert not api.set_device_boost(device, 3600, 22).success
+    api.set_device_settings.assert_not_called()

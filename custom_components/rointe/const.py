@@ -26,7 +26,7 @@ CONF_API_TYPE = "rointe_api_type"
 
 ROINTE_MANUFACTURER = "Rointe"
 
-ROINTE_SUPPORTED_DEVICES = ["radiator", "towel", "therm", "radiatorb", "acs", "oval_towel"]
+ROINTE_SUPPORTED_DEVICES = ["radiator", "towel", "therm", "radiatorb", "acs", "oval_towel", "storage_heater"]
 
 RADIATOR_DEFAULT_TEMPERATURE = 20
 

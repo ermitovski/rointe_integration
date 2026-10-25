@@ -16,6 +16,7 @@ from .const import DOMAIN
 from .coordinator import RointeDataUpdateCoordinator
 from .rointe_entity import RointeRadiatorEntity
 from .rointesdk.device import RointeDevice
+from .rointesdk.storage import STORAGE_FIELDS
 
 
 @dataclass
@@ -37,7 +38,23 @@ class RointeSwitchEntityDescription(
     icon_off: str | None = None
 
 
+STORAGE_SWITCHES = tuple(
+    RointeSwitchEntityDescription(
+        key=field, name=name, icon="mdi:heating-coil", field_name=field,
+        value_fn=lambda device, field=field: device.commanded.get(field),
+        available_fn=lambda device, field=field: device.supports_storage_setting(field),
+    )
+    for field, name in (
+        ("charge_smart", "Zone Smart Charging"),
+        ("res_auto_config", "Zone Extra Element in Auto"),
+        ("res_man_config", "Zone Extra Element in Manual"),
+        ("res_boost_config", "Zone Extra Element in Boost"),
+        ("res_holiday_config", "Zone Extra Element in Holiday"),
+    )
+)
+
 SWITCH_DESCRIPTIONS: tuple[RointeSwitchEntityDescription, ...] = (
+    *STORAGE_SWITCHES,
     RointeSwitchEntityDescription(
         key="early_start", name="Early Start", icon="mdi:clock-start",
         field_name="adelanto_enable",
@@ -60,7 +77,8 @@ SWITCH_DESCRIPTIONS: tuple[RointeSwitchEntityDescription, ...] = (
         name="Silence Mode",
         icon="mdi:volume-off",
         field_name="silence_mode",
-        value_fn=lambda device: device.silence_mode,
+        value_fn=lambda device: device.commanded.get("silence_mode") if device.type == "storage_heater" else device.silence_mode,
+        available_fn=lambda device: device.supports_storage_setting("silence_mode") if device.type == "storage_heater" else True,
     ),
     RointeSwitchEntityDescription(
         key="local_lock",
@@ -143,6 +161,8 @@ class RointeSwitch(RointeRadiatorEntity, SwitchEntity):
         """Initialize the switch."""
         super().__init__(coordinator, device, unique_id=device.id)
         self.entity_description = description
+        if device.type == "storage_heater" and description.key == "silence_mode":
+            self._attr_name = "Zone Silence Mode"
         self._attr_unique_id = f"{device.id}_{description.key}"
 
     @property
@@ -190,6 +210,7 @@ class RointeSwitch(RointeRadiatorEntity, SwitchEntity):
         if not device.supports_setting(field_name):
             raise HomeAssistantError("This setting is not supported by this device")
 
-        result = api.set_optional_settings(device, {field_name: value})
+        setter = api.set_storage_settings if device.type == "storage_heater" and field_name in STORAGE_FIELDS else api.set_optional_settings
+        result = setter(device, {field_name: value})
         if not result.success:
             raise HomeAssistantError(result.error_message or "Unable to update device")
