@@ -7,12 +7,14 @@ from typing import Any
 
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import StateType
 
 from .discovery import setup_description_entities
 from .const import DOMAIN
+from .energy import DailyEnergyTotal
 from .coordinator import RointeDataUpdateCoordinator
 from .rointe_entity import RointeRadiatorEntity
 from .rointesdk.device import RointeDevice
@@ -28,7 +30,7 @@ async def async_setup_entry(
     coordinator: RointeDataUpdateCoordinator = hass.data[DOMAIN][entry.entry_id]
 
     setup_description_entities(
-        entry, coordinator, async_add_entities, SENSOR_DESCRIPTIONS, RointeSensor
+        entry, coordinator, async_add_entities, SENSOR_DESCRIPTIONS, _create_sensor
     )
 
 
@@ -79,3 +81,48 @@ class RointeSensor(RointeRadiatorEntity, SensorEntity):
             and self._radiator.hass_available
             and self.entity_description.available_fn(self._radiator)
         )
+
+
+def _create_sensor(device, coordinator, description):
+    """Use persistent accumulation for daily Nexa energy without changing IDs."""
+    if coordinator.rointe_api.use_nexa_ws and description.key == "energy":
+        return RointeCumulativeEnergySensor(device, coordinator, description)
+    return RointeSensor(device, coordinator, description)
+
+
+class RointeCumulativeEnergySensor(RointeSensor, RestoreEntity):
+    """Persist daily-energy offsets across Home Assistant restarts."""
+
+    def __init__(self, device, coordinator, description) -> None:
+        super().__init__(device, coordinator, description)
+        self._total = DailyEnergyTotal()
+        self._update_total()
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        if (state := await self.async_get_last_state()) is not None:
+            self._total = DailyEnergyTotal.restore(state.attributes)
+        self._update_total()
+
+    def _update_total(self) -> None:
+        data = self._radiator.energy_data if self._radiator else None
+        if data is not None and data.daily:
+            try:
+                self._total.update(data.start.date(), data.kwh)
+            except (TypeError, ValueError, OverflowError):
+                pass
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        self._update_total()
+        super()._handle_coordinator_update()
+
+    @property
+    def native_value(self) -> StateType:
+        if self._radiator is None or self._radiator.energy_data is None:
+            return None
+        return self._total.value
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return self._total.attributes()
